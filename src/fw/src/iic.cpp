@@ -1,5 +1,9 @@
 #include "src/fw/inc/iic.h"
 
+#include "src/cfg/BuildConfig.h"
+
+#if PRTN_ENABLE_IIC
+
 #include <Wire.h>
 
 IIC::IIC() : IIC(Config {}) {}
@@ -243,3 +247,5 @@ const char* IIC::errorName(Error error) {
             return "OTHER";
     }
 }
+
+#endif

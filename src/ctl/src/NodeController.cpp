@@ -55,42 +55,45 @@ bool NodeController::createTask() {
     return true;
 }
 
+void NodeController::printConsoleLog(uint32_t& lastWifiLogMs, uint32_t intervalMs) {
+    const uint32_t nowMs = millis();
+    if (nowMs - lastWifiLogMs >= intervalMs) {
+        const Wifi::Status wifiStatus = m_wifi.status();
+
+        if (wifiStatus.ap.enabled) {
+            const String apIp = wifiStatus.ap.ip.toString();
+            m_console.log(
+                "AP %s ip=%s ch=%u clients=%u/%u",
+                wifiStatus.ap.running ? "ON" : "OFF",
+                apIp.c_str(),
+                wifiStatus.ap.channel,
+                wifiStatus.ap.clientCount,
+                wifiStatus.ap.maxClients);
+        }
+
+        if (wifiStatus.sta.enabled) {
+            const String staIp = wifiStatus.sta.ip.toString();
+            m_console.log(
+                "STA %s ip=%s rssi=%ld dBm quality=%u%% status=%d",
+                wifiStatus.sta.connected ? "ON" : "OFF",
+                staIp.c_str(),
+                wifiStatus.sta.rssi,
+                wifiStatus.sta.quality,
+                wifiStatus.sta.statusCode);
+        }
+
+        lastWifiLogMs = nowMs;
+    }
+}
+
 void NodeController::ControlLoop() {
     TickType_t taskLastWakeTime = xTaskGetTickCount();
     uint32_t   lastWifiLogMs    = 0;
 
     for (;;) {
-        m_wifi.update();
+        m_wifi.updateByIntervalMs(400);
         m_ledAux.updateByIntervalMs(1000);
-
-        const uint32_t nowMs = millis();
-        if (nowMs - lastWifiLogMs >= 1000) {
-            const Wifi::Status wifiStatus = m_wifi.status();
-
-            if (wifiStatus.ap.enabled) {
-                const String apIp = wifiStatus.ap.ip.toString();
-                m_console.log(
-                    "AP %s ip=%s ch=%u clients=%u/%u",
-                    wifiStatus.ap.running ? "ON" : "OFF",
-                    apIp.c_str(),
-                    wifiStatus.ap.channel,
-                    wifiStatus.ap.clientCount,
-                    wifiStatus.ap.maxClients);
-            }
-
-            if (wifiStatus.sta.enabled) {
-                const String staIp = wifiStatus.sta.ip.toString();
-                m_console.log(
-                    "STA %s ip=%s rssi=%ld dBm quality=%u%% status=%d",
-                    wifiStatus.sta.connected ? "ON" : "OFF",
-                    staIp.c_str(),
-                    wifiStatus.sta.rssi,
-                    wifiStatus.sta.quality,
-                    wifiStatus.sta.statusCode);
-            }
-
-            lastWifiLogMs = nowMs;
-        }
+        printConsoleLog(lastWifiLogMs, m_printLogIntervalMs);
 
         vTaskDelayUntil(&taskLastWakeTime, m_period);
     }

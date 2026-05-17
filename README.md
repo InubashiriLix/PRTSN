@@ -1,6 +1,6 @@
-# PRTN
+# PRTSN
 
-**PRTN = PRTS Node**
+- **PRTSN = PRTS Node = Personal Rhodesisland Terminal Service Node**
 
 This is a layered Arduino CLI project for the **AirM2M CORE ESP32-C3** board.
 
@@ -61,9 +61,35 @@ cfg       -> board/build constants
 
 ## Build
 
+Project build defaults live in:
+
+```text
+config/project.mk
+```
+
+Machine-specific overrides can be placed in:
+
+```text
+config/local.mk
+```
+
+`config/local.mk` is ignored by git. Use it for values such as `PORT`, temporary CPU frequency, debug level, or partition experiments.
+
 ```bash
 make check
 make build
+```
+
+Show the active configuration:
+
+```bash
+make info
+```
+
+Show board menu options supported by the installed ESP32 Arduino core:
+
+```bash
+make board-options
 ```
 
 ## Upload

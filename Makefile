@@ -1,8 +1,14 @@
-FQBN := esp32:esp32:AirM2M_CORE_ESP32C3
-PORT ?= /dev/ttyACM0
-BAUD ?= 115200
-SKETCH := .
-BUILD_DIR := build
+include config/project.mk
+-include config/local.mk
+
+BASE_FQBN := $(BOARD_PACKAGE):$(BOARD_ARCH):$(BOARD_ID)
+FQBN_OPTIONS := UploadSpeed=$(UPLOAD_SPEED),CDCOnBoot=$(CDC_ON_BOOT),CPUFreq=$(CPU_FREQ),FlashFreq=$(FLASH_FREQ),PartitionScheme=$(PARTITION_SCHEME),DebugLevel=$(DEBUG_LEVEL),EraseFlash=$(ERASE_FLASH)
+FQBN := $(BASE_FQBN):$(FQBN_OPTIONS)
+
+BUILD_FLAGS := $(strip $(BUILD_DEFINES) $(BUILD_OPT_FLAGS))
+ifneq ($(BUILD_FLAGS),)
+BUILD_PROPERTIES := --build-property compiler.c.extra_flags="$(BUILD_FLAGS)" --build-property compiler.cpp.extra_flags="$(BUILD_FLAGS)"
+endif
 
 RESET  := \033[0m
 BOLD   := \033[1m
@@ -12,7 +18,7 @@ GREEN  := \033[32m
 YELLOW := \033[33m
 CYAN   := \033[36m
 
-.PHONY: help info check compdb build upload monitor list-ports clean clean-log
+.PHONY: help info board-options check compdb build upload monitor list-ports clean clean-log
 
 define section
 	@printf "\n$(BOLD)$(CYAN)==> %s$(RESET)\n" "$(1)"
@@ -54,6 +60,8 @@ help:
 	@printf "                    列出已连接的板子和串口\n"
 	@printf "  $(CYAN)make info$(RESET)         Show current project configuration\n"
 	@printf "                    显示当前项目配置\n"
+	@printf "  $(CYAN)make board-options$(RESET) Show available board menu options\n"
+	@printf "                    显示当前板卡可用配置项\n"
 	@printf "  $(CYAN)make clean$(RESET)        Remove local build output\n"
 	@printf "                    删除本地构建输出\n"
 	@printf "  $(CYAN)make clean-log$(RESET)    Remove Neovim LSP log\n"
@@ -61,6 +69,7 @@ help:
 
 	@printf "$(BOLD)Config / 当前配置$(RESET)\n"
 	@printf "  FQBN      = $(FQBN)\n"
+	@printf "  Config    = config/project.mk + optional config/local.mk\n"
 	@printf "  PORT      = $(PORT)\n"
 	@printf "  BAUD      = $(BAUD)\n"
 	@printf "  SKETCH    = $(SKETCH)\n"
@@ -80,11 +89,25 @@ info:
 	$(call section,Project configuration / 项目配置)
 	@printf "Project / 项目      : $(BOLD)PRTN$(RESET) / PRTS Node\n"
 	@printf "Board   / 板卡      : $(BOLD)AirM2M CORE ESP32-C3$(RESET)\n"
-	@printf "FQBN               : $(FQBN)\n"
+	@printf "Base FQBN          : $(BASE_FQBN)\n"
+	@printf "Full FQBN          : $(FQBN)\n"
+	@printf "Partition / 分区   : $(PARTITION_SCHEME)\n"
+	@printf "CPU freq / 主频    : $(CPU_FREQ) MHz\n"
+	@printf "Flash freq         : $(FLASH_FREQ) MHz\n"
+	@printf "USB CDC on boot    : $(CDC_ON_BOOT)\n"
+	@printf "Upload speed       : $(UPLOAD_SPEED)\n"
+	@printf "Debug level        : $(DEBUG_LEVEL)\n"
+	@printf "Erase flash        : $(ERASE_FLASH)\n"
+	@printf "Build flags        : $(if $(BUILD_FLAGS),$(BUILD_FLAGS),<arduino default>)\n"
 	@printf "Port   / 串口      : $(PORT)\n"
 	@printf "Baud   / 波特率    : $(BAUD)\n"
 	@printf "Sketch             : $(SKETCH)\n"
 	@printf "Build dir / 构建目录: $(BUILD_DIR)\n"
+
+board-options:
+	$(call section,Board options / 板卡配置项)
+	$(call cmd,arduino-cli board details -b $(BASE_FQBN))
+	@arduino-cli board details -b $(BASE_FQBN)
 
 check:
 	$(call section,Checking toolchain / 检查工具链)
@@ -118,12 +141,12 @@ check:
 	$(call ok,esp32:esp32 core installed / ESP32 core 已安装)
 
 	$(call section,Checking board FQBN / 检查板卡 FQBN)
-	@arduino-cli board listall | grep -q "$(FQBN)" || { \
-		printf "$(RED)✗ Board not found / 未找到板卡: $(FQBN)$(RESET)\n"; \
+	@arduino-cli board listall | grep -q "$(BASE_FQBN)" || { \
+		printf "$(RED)✗ Board not found / 未找到板卡: $(BASE_FQBN)$(RESET)\n"; \
 		printf "Try / 尝试:\n  arduino-cli board listall | grep -i AirM2M\n"; \
 		exit 1; \
 	}
-	$(call ok,board available / 板卡可用: $(FQBN))
+	$(call ok,board available / 板卡可用: $(BASE_FQBN))
 
 	$(call section,Checking serial port / 检查串口)
 	@if [ -e "$(PORT)" ]; then \
@@ -136,8 +159,8 @@ check:
 
 compdb:
 	$(call section,Generating compile_commands.json / 生成 clangd 编译数据库)
-	$(call cmd,arduino-cli compile --fqbn $(FQBN) --only-compilation-database --build-path $(BUILD_DIR) $(SKETCH))
-	@arduino-cli compile --fqbn $(FQBN) --only-compilation-database --build-path $(BUILD_DIR) $(SKETCH)
+	$(call cmd,arduino-cli compile --fqbn $(FQBN) $(BUILD_PROPERTIES) --only-compilation-database --build-path $(BUILD_DIR) $(SKETCH))
+	@arduino-cli compile --fqbn $(FQBN) $(BUILD_PROPERTIES) --only-compilation-database --build-path $(BUILD_DIR) $(SKETCH)
 	@if [ -f "$(BUILD_DIR)/compile_commands.json" ]; then \
 		cp "$(BUILD_DIR)/compile_commands.json" ./compile_commands.json; \
 		printf "$(GREEN)✓$(RESET) compile_commands.json generated / 编译数据库已生成\n"; \
@@ -149,8 +172,8 @@ compdb:
 
 build:
 	$(call section,Building firmware / 编译固件)
-	$(call cmd,arduino-cli compile --fqbn $(FQBN) --build-path $(BUILD_DIR) $(SKETCH))
-	@arduino-cli compile --fqbn $(FQBN) --build-path $(BUILD_DIR) $(SKETCH)
+	$(call cmd,arduino-cli compile --fqbn $(FQBN) $(BUILD_PROPERTIES) --build-path $(BUILD_DIR) $(SKETCH))
+	@arduino-cli compile --fqbn $(FQBN) $(BUILD_PROPERTIES) --build-path $(BUILD_DIR) $(SKETCH)
 	$(call ok,build finished / 编译完成)
 
 upload:
