@@ -4,7 +4,7 @@
 #include "../../dvc/inc/LED.h"
 #include "../../dvc/inc/SerialConsole.h"
 #include "../../dom/NodeInfo.h"
-#include "../../svc/inc/MqttServer.h"
+#include "../../svc/inc/MqttClient.h"
 #include "../../svc/inc/wifi.h"
 
 #include <Arduino.h>
@@ -20,7 +20,10 @@ private:
     LED&           m_ledAux;
     SerialConsole& m_console;
     Wifi&          m_wifi;
-    MqttServer&    m_mqttServer;
+    MqttClient&    m_mqttClient;
+
+    bool     m_mqttClientSubscribed = false;
+    uint32_t m_lastMqttClientPublishMs = 0;
 
     // freertos:
     TaskHandle_t m_taskHandle = nullptr;
@@ -31,7 +34,7 @@ private:
     constexpr static UBaseType_t m_priority           = 4;
 
 public:
-    NodeController(NodeInfo& nodeInfo, LED& ledAux, SerialConsole& console, Wifi& wifi, MqttServer& mqttServer);
+    NodeController(NodeInfo& nodeInfo, LED& ledAux, SerialConsole& console, Wifi& wifi, MqttClient& mqttClient);
 
     // standard setup and loop methods using freertos tasks:
     bool        setup();
@@ -41,8 +44,10 @@ public:
     void        ControlLoop();
 
 private:
-    // the mqttserver handlers
-    void        mqttServerMsgHandler(const char* topic, const uint8_t* payload, size_t payloadLen);
-    void        mqttServerEventHandler(const MqttServer::Event& event);
-    const char* mqttDisconnectReasonName(MqttServer::DisconnectReason reason) const;
+    // ===== the mqtt client handlers ======
+    void        mqttClientMsgHandler(const char* topic, const uint8_t* payload, size_t payloadLen);
+    void        mqttClientEventHandler(const MqttClient::Event& event);
+    const char* mqttClientDisconnectReasonName(MqttClient::DisconnectReason reason) const;
+    void        updateMqttClientTest();
+    // =============== end =================
 };

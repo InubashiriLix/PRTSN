@@ -5,12 +5,12 @@ NodeController::NodeController(NodeInfo&      nodeInfo,
                                LED&           ledAux,
                                SerialConsole& console,
                                Wifi&          wifi,
-                               MqttServer&    mqttServer)
+                               MqttClient&    mqttClient)
     : m_nodeInfo(nodeInfo),
       m_ledAux(ledAux),
       m_console(console),
       m_wifi(wifi),
-      m_mqttServer(mqttServer) {}
+      m_mqttClient(mqttClient) {}
 
 bool NodeController::setup() {
     // ================== SETUP DEVICES / SERVICES ===================
@@ -22,21 +22,15 @@ bool NodeController::setup() {
         return false;
     }
 
-    m_mqttServer.setMessageHandler(
+    m_mqttClient.setMessageHandler(
         [this](const char* topic, const uint8_t* payload, size_t payloadLen) {
-            mqttServerMsgHandler(topic, payload, payloadLen);
+            mqttClientMsgHandler(topic, payload, payloadLen);
         });
 
-    m_mqttServer.setEventHandler(
-        [this](const MqttServer::Event& event) {
-            mqttServerEventHandler(event);
+    m_mqttClient.setEventHandler(
+        [this](const MqttClient::Event& event) {
+            mqttClientEventHandler(event);
         });
-
-    if (!m_mqttServer.begin()) {
-        m_nodeInfo.updateNodeState(ERROR);
-        m_console.error("failed to start mqttServer");
-        return false;
-    }
     // ================ SETUP DEVICES / SERVICES END =================
 
     // ================ CREATE FREERTOS TASK ==================
@@ -116,7 +110,7 @@ void NodeController::ControlLoop() {
 
     for (;;) {
         m_wifi.updateByIntervalMs(400);
-        m_mqttServer.update();
+        updateMqttClientTest();
         m_ledAux.updateByIntervalMs(1000);
         printConsoleLog(lastWifiLogMs, m_printLogIntervalMs);
 
@@ -124,95 +118,148 @@ void NodeController::ControlLoop() {
     }
 }
 
-void NodeController::mqttServerMsgHandler(const char* topic, const uint8_t* payload, size_t payloadLen) {
+void NodeController::mqttClientMsgHandler(const char* topic, const uint8_t* payload, size_t payloadLen) {
     m_console.log(
-        "received mqtt message topic=%s payload=%.*s",
+        "mqtt client message topic=%s payload=%.*s",
         topic,
         static_cast<int>(payloadLen),
         reinterpret_cast<const char*>(payload));
 }
 
-void NodeController::mqttServerEventHandler(const MqttServer::Event& event) {
+void NodeController::mqttClientEventHandler(const MqttClient::Event& event) {
     switch (event.type) {
-        case MqttServer::EventType::Started:
+        case MqttClient::EventType::ConnectAttempt:
+#if PRTN_MQTT_CLIENT_VERBOSE_LOG
             m_console.log(
-                "mqtt server started port=%u maxClients=%u",
+                "mqtt client connecting host=%s port=%u clientId=%s",
+                event.host,
                 event.port,
-                event.maxClients);
-            break;
-
-        case MqttServer::EventType::Stopped:
-            m_console.log("mqtt server stopped");
-            break;
-
-        case MqttServer::EventType::TcpClientAccepted:
-#if PRTN_MQTT_SERVER_VERBOSE_LOG
-            m_console.log("mqtt tcp client accepted slot=%u", event.clientIndex);
+                event.clientId);
 #endif
             break;
 
-        case MqttServer::EventType::TcpClientRejected:
-            m_console.error("mqtt tcp client rejected: no free client slot");
+        case MqttClient::EventType::Connected:
+            m_console.log(
+                "mqtt client connected host=%s port=%u clientId=%s",
+                event.host,
+                event.port,
+                event.clientId);
             break;
 
-        case MqttServer::EventType::ClientConnected:
-            m_console.log(
-                "mqtt client connected slot=%u clientId=%s clients=%u",
-                event.clientIndex,
-                event.clientId,
-                event.mqttClients);
+        case MqttClient::EventType::ConnectFailed:
+            m_console.error(
+                "mqtt client connect failed host=%s port=%u reason=%s",
+                event.host,
+                event.port,
+                mqttClientDisconnectReasonName(event.reason));
             break;
 
-        case MqttServer::EventType::ClientDisconnected:
+        case MqttClient::EventType::Disconnected:
+            m_mqttClientSubscribed = false;
             m_console.log(
-                "mqtt client disconnected slot=%u clientId=%s reason=%s clients=%u",
-                event.clientIndex,
-                event.clientId,
-                mqttDisconnectReasonName(event.reason),
-                event.mqttClients);
+                "mqtt client disconnected reason=%s",
+                mqttClientDisconnectReasonName(event.reason));
             break;
 
-        case MqttServer::EventType::Subscribe:
-#if PRTN_MQTT_SERVER_VERBOSE_LOG
+        case MqttClient::EventType::SubscribeSent:
             m_console.log(
-                "mqtt client subscribed slot=%u clientId=%s topic=%s subs=%u",
-                event.clientIndex,
-                event.clientId,
+                "mqtt client subscribe sent topic=%s packetId=%u",
                 event.topic,
-                event.activeSubscriptions);
-#endif
+                event.packetId);
             break;
 
-        case MqttServer::EventType::Publish:
-#if PRTN_MQTT_SERVER_VERBOSE_LOG
+        case MqttClient::EventType::PublishSent:
+#if PRTN_MQTT_CLIENT_VERBOSE_LOG
             m_console.log(
-                "mqtt publish received slot=%u clientId=%s topic=%s payloadLen=%u",
-                event.clientIndex,
-                event.clientId,
+                "mqtt client publish sent topic=%s payloadLen=%u",
                 event.topic,
                 static_cast<unsigned>(event.payloadLen));
+#endif
+            break;
+
+        case MqttClient::EventType::PublishReceived:
+            m_console.log(
+                "mqtt client publish received topic=%s payloadLen=%u",
+                event.topic,
+                static_cast<unsigned>(event.payloadLen));
+            break;
+
+        case MqttClient::EventType::PingReqSent:
+#if PRTN_MQTT_CLIENT_VERBOSE_LOG
+            m_console.log("mqtt client pingreq sent");
+#endif
+            break;
+
+        case MqttClient::EventType::PingRespReceived:
+#if PRTN_MQTT_CLIENT_VERBOSE_LOG
+            m_console.log("mqtt client pingresp received");
+#endif
+            break;
+
+        case MqttClient::EventType::SubAckReceived:
+            m_console.log(
+                "mqtt client suback received packetId=%u",
+                event.packetId);
+            break;
+
+        case MqttClient::EventType::PubAckReceived:
+#if PRTN_MQTT_CLIENT_VERBOSE_LOG
+            m_console.log(
+                "mqtt client puback received packetId=%u",
+                event.packetId);
 #endif
             break;
     }
 }
 
-const char* NodeController::mqttDisconnectReasonName(MqttServer::DisconnectReason reason) const {
+const char* NodeController::mqttClientDisconnectReasonName(MqttClient::DisconnectReason reason) const {
     switch (reason) {
-        case MqttServer::DisconnectReason::None:
+        case MqttClient::DisconnectReason::None:
             return "none";
-        case MqttServer::DisconnectReason::TcpClosed:
-            return "tcp_closed";
-        case MqttServer::DisconnectReason::ClientRequested:
-            return "client_requested";
-        case MqttServer::DisconnectReason::ProtocolError:
-            return "protocol_error";
-        case MqttServer::DisconnectReason::KeepAliveTimeout:
+        case MqttClient::DisconnectReason::TcpConnectFailed:
+            return "tcp_connect_failed";
+        case MqttClient::DisconnectReason::ConnectPacketFailed:
+            return "connect_packet_failed";
+        case MqttClient::DisconnectReason::ConnAckRejected:
+            return "connack_rejected";
+        case MqttClient::DisconnectReason::PacketReadFailed:
+            return "packet_read_failed";
+        case MqttClient::DisconnectReason::KeepAliveTimeout:
             return "keep_alive_timeout";
-        case MqttServer::DisconnectReason::ServerStopped:
-            return "server_stopped";
-        case MqttServer::DisconnectReason::Rejected:
-            return "rejected";
+        case MqttClient::DisconnectReason::BrokerRequested:
+            return "broker_requested";
+        case MqttClient::DisconnectReason::ClientRequested:
+            return "client_requested";
+        case MqttClient::DisconnectReason::LocalStop:
+            return "local_stop";
     }
 
     return "unknown";
+}
+
+void NodeController::updateMqttClientTest() {
+    const Wifi::Status wifiStatus = m_wifi.status();
+    if (!wifiStatus.sta.connected) {
+        m_mqttClientSubscribed = false;
+        return;
+    }
+
+    m_mqttClient.update();
+
+    if (!m_mqttClient.connected()) {
+        m_mqttClientSubscribed = false;
+        return;
+    }
+
+    if (!m_mqttClientSubscribed) {
+        m_mqttClientSubscribed = m_mqttClient.subscribe(PRTN_MQTT_CLIENT_TEST_TOPIC);
+        return;
+    }
+
+    const uint32_t nowMs = millis();
+    if (nowMs - m_lastMqttClientPublishMs >= PRTN_MQTT_CLIENT_TEST_PUBLISH_MS) {
+        if (m_mqttClient.publish(PRTN_MQTT_CLIENT_TEST_TOPIC, PRTN_MQTT_CLIENT_TEST_PAYLOAD)) {
+            m_lastMqttClientPublishMs = nowMs;
+        }
+    }
 }
