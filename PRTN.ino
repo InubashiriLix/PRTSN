@@ -5,6 +5,7 @@
 #include "src/dom/NodeInfo.h"
 #include "src/dvc/inc/LED.h"
 #include "src/dvc/inc/SerialConsole.h"
+#include "src/svc/inc/MqttServer.h"
 #include "src/svc/inc/wifi.h"
 
 #include <Arduino.h>
@@ -39,7 +40,19 @@ namespace
 
     static Wifi wifi(wifiConfig);
 
-    static NodeController      nodeController(nodeInfo, ledAux, console, wifi);
+    static WiFiServer mqttTcpServer(PRTN_MQTT_SERVER_PORT);
+
+    static MqttServerConfig mqttServerConfig {
+        .port                      = PRTN_MQTT_SERVER_PORT,
+        .maxClients                = PRTN_MQTT_SERVER_MAX_CLIENTS_NUM,
+        .maxSubscriptions          = PRTN_MQTT_SERVER_MAX_SUBSCRIPTIONS_NUM,
+        .maxPacketSize             = PRTN_MQTT_PACKET_BUFFER_SIZE,
+        .defaultKeepAliveTimeoutMs = 90000,
+    };
+
+    static MqttServer mqttServer(mqttTcpServer, mqttServerConfig);
+
+    static NodeController      nodeController(nodeInfo, ledAux, console, wifi, mqttServer);
     static HeartbeatController heartbeatController(nodeInfo, ledMain, console);
 } // namespace
 

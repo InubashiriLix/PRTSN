@@ -4,6 +4,7 @@
 #include "../../dvc/inc/LED.h"
 #include "../../dvc/inc/SerialConsole.h"
 #include "../../dom/NodeInfo.h"
+#include "../../svc/inc/MqttServer.h"
 #include "../../svc/inc/wifi.h"
 
 #include <Arduino.h>
@@ -19,6 +20,7 @@ private:
     LED&           m_ledAux;
     SerialConsole& m_console;
     Wifi&          m_wifi;
+    MqttServer&    m_mqttServer;
 
     // freertos:
     TaskHandle_t m_taskHandle = nullptr;
@@ -29,7 +31,7 @@ private:
     constexpr static UBaseType_t m_priority           = 4;
 
 public:
-    NodeController(NodeInfo& nodeInfo, LED& ledAux, SerialConsole& console, Wifi& wifi);
+    NodeController(NodeInfo& nodeInfo, LED& ledAux, SerialConsole& console, Wifi& wifi, MqttServer& mqttServer);
 
     // standard setup and loop methods using freertos tasks:
     bool        setup();
@@ -37,4 +39,10 @@ public:
     static void taskEntry(void* arg);
     void        printConsoleLog(uint32_t& lastWifiLogMs, uint32_t intervalMs);
     void        ControlLoop();
+
+private:
+    // the mqttserver handlers
+    void        mqttServerMsgHandler(const char* topic, const uint8_t* payload, size_t payloadLen);
+    void        mqttServerEventHandler(const MqttServer::Event& event);
+    const char* mqttDisconnectReasonName(MqttServer::DisconnectReason reason) const;
 };
