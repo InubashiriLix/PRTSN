@@ -28,10 +28,10 @@ struct MqttClientConfig
     const char* username = nullptr;
     const char* password = nullptr;
 
-    uint16_t keepAliveSec = 60;
+    uint16_t keepAliveSec = PRTN_MQTT_CLIENT_KEEP_ALIVE_SEC;
     bool     cleanSession = true;
-    uint16_t maxPacketSize = 256;
-    uint32_t reconnectIntervalMs = 5000;
+    uint16_t maxPacketSize = PRTN_MQTT_CLIENT_MAX_PACKET_SIZE;
+    uint32_t reconnectIntervalMs = PRTN_MQTT_CLIENT_RECONNECT_MS;
 };
 
 struct MqttPacket

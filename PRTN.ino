@@ -5,7 +5,8 @@
 #include "src/dom/NodeInfo.h"
 #include "src/dvc/inc/LED.h"
 #include "src/dvc/inc/SerialConsole.h"
-#include "src/svc/inc/MqttServer.h"
+#include "src/svc/inc/Mqtt.h"
+#include "src/svc/inc/MqttClient.h"
 #include "src/svc/inc/wifi.h"
 
 #include <Arduino.h>
@@ -29,30 +30,30 @@ namespace
 
     static Wifi::Config wifiConfig {
         .mode = PRTN_WIFI_MODE,
-        .sta  = {},
-        .ap   = {
-            .ssid       = PRTN_WIFI_AP_SSID,
-            .password   = PRTN_WIFI_AP_PASSWORD,
-            .channel    = PRTN_WIFI_AP_CHANNEL,
-            .hidden     = false,
-            .maxClients = PRTN_WIFI_AP_MAX_CLIENTS_NUM},
-    };
+        .sta  = {
+            .ssid        = PRTN_WIFI_STA_SSID,
+            .password    = PRTN_WIFI_STA_PASSWORD,
+            .hostname    = PRTN_WIFI_STA_HOSTNAME,
+            .reconnectMs = PRTN_WIFI_STA_RECONNECT_MS},
+        .ap = {}};
 
     static Wifi wifi(wifiConfig);
 
-    static WiFiServer mqttTcpServer(PRTN_MQTT_SERVER_PORT);
-
-    static MqttServerConfig mqttServerConfig {
-        .port                      = PRTN_MQTT_SERVER_PORT,
-        .maxClients                = PRTN_MQTT_SERVER_MAX_CLIENTS_NUM,
-        .maxSubscriptions          = PRTN_MQTT_SERVER_MAX_SUBSCRIPTIONS_NUM,
-        .maxPacketSize             = PRTN_MQTT_PACKET_BUFFER_SIZE,
-        .defaultKeepAliveTimeoutMs = 90000,
+    static MqttClientConfig mqttClientConfig {
+        .host                = PRTN_MQTT_CLIENT_HOST,
+        .port                = PRTN_MQTT_CLIENT_PORT,
+        .clientId            = PRTN_MQTT_CLIENT_ID,
+        .username            = PRTN_MQTT_CLIENT_USERNAME,
+        .password            = PRTN_MQTT_CLIENT_PASSWORD,
+        .keepAliveSec        = PRTN_MQTT_CLIENT_KEEP_ALIVE_SEC,
+        .cleanSession        = true,
+        .maxPacketSize       = PRTN_MQTT_CLIENT_MAX_PACKET_SIZE,
+        .reconnectIntervalMs = PRTN_MQTT_CLIENT_RECONNECT_MS,
     };
 
-    static MqttServer mqttServer(mqttTcpServer, mqttServerConfig);
+    static MqttClient mqttClient(mqttClientConfig);
 
-    static NodeController      nodeController(nodeInfo, ledAux, console, wifi, mqttServer);
+    static NodeController      nodeController(nodeInfo, ledAux, console, wifi, mqttClient);
     static HeartbeatController heartbeatController(nodeInfo, ledMain, console);
 } // namespace
 
