@@ -1,12 +1,15 @@
 #include "src/ctl/inc/EspNowEchoController.h"
+#include "src/cfg/ProfileConfig.h"
 
 #include <cstring>
 
-EspNowEchoController::EspNowEchoController(EspNowNode&   espNowNode,
-                                           LED&          ledAux,
+EspNowEchoController::EspNowEchoController(EspNowNode&    espNowNode,
+                                           LED&           ledMain,
+                                           LED&           ledAux,
                                            SerialConsole& console,
-                                           const Config& config)
+                                           const Config&  config)
     : m_espNowNode(espNowNode),
+      m_ledMain(ledMain),
       m_ledAux(ledAux),
       m_console(console),
       m_config(config) {}
@@ -26,7 +29,7 @@ void EspNowEchoController::update() {
 
     const uint32_t nowMs = millis();
 
-    updateAuxLed();
+    updateLed();
     logEspNowStats();
 
     if (!m_config.enableSender) {
@@ -43,7 +46,7 @@ void EspNowEchoController::update() {
         return;
     }
 
-    uint8_t payload[EspNowProtocol::MaxPayloadLen] {};
+    uint8_t      payload[EspNowProtocol::MaxPayloadLen] {};
     const size_t payloadLen = m_config.payloadLen <= sizeof(payload) ? m_config.payloadLen : sizeof(payload);
     fillEspNowTestPayload(payload, payloadLen);
 
@@ -60,7 +63,8 @@ void EspNowEchoController::update() {
                 static_cast<unsigned>(m_espNowTxCounter));
             logEspNowPayload("esp-now tx", payload, payloadLen);
         }
-    } else {
+    }
+    else {
         ++m_espNowTxFailCount;
     }
 }
@@ -92,7 +96,8 @@ void EspNowEchoController::handleEspNowEvent(const EspNowNode::Event& event) {
                 if (m_config.verboseLog) {
                     m_console.log("esp-now command result echoed to=%s id=%s", espNowEventDisplayName(event), event.nodeId);
                 }
-            } else {
+            }
+            else {
                 ++m_espNowEchoFailCount;
             }
             break;
@@ -198,17 +203,17 @@ void EspNowEchoController::logEspNowStats() {
         return;
     }
 
-    const uint32_t elapsedMs = m_lastEspNowStatsMs == 0
-                                   ? m_config.statsLogIntervalMs
-                                   : nowMs - m_lastEspNowStatsMs;
-    const uint32_t txDelta = m_espNowTxCommandCount - m_lastEspNowStatsTxCount;
-    const uint32_t rxCmdDelta = m_espNowRxCommandCount - m_lastEspNowStatsRxCommandCount;
+    const uint32_t elapsedMs     = m_lastEspNowStatsMs == 0
+                                       ? m_config.statsLogIntervalMs
+                                       : nowMs - m_lastEspNowStatsMs;
+    const uint32_t txDelta       = m_espNowTxCommandCount - m_lastEspNowStatsTxCount;
+    const uint32_t rxCmdDelta    = m_espNowRxCommandCount - m_lastEspNowStatsRxCommandCount;
     const uint32_t rxResultDelta = m_espNowRxResultCount - m_lastEspNowStatsRxResultCount;
-    const uint32_t echoDelta = m_espNowTxEchoCount - m_lastEspNowStatsEchoCount;
-    const uint32_t txHz = elapsedMs > 0 ? (txDelta * 1000U) / elapsedMs : 0;
-    const uint32_t rxCmdHz = elapsedMs > 0 ? (rxCmdDelta * 1000U) / elapsedMs : 0;
-    const uint32_t rxResultHz = elapsedMs > 0 ? (rxResultDelta * 1000U) / elapsedMs : 0;
-    const uint32_t echoHz = elapsedMs > 0 ? (echoDelta * 1000U) / elapsedMs : 0;
+    const uint32_t echoDelta     = m_espNowTxEchoCount - m_lastEspNowStatsEchoCount;
+    const uint32_t txHz          = elapsedMs > 0 ? (txDelta * 1000U) / elapsedMs : 0;
+    const uint32_t rxCmdHz       = elapsedMs > 0 ? (rxCmdDelta * 1000U) / elapsedMs : 0;
+    const uint32_t rxResultHz    = elapsedMs > 0 ? (rxResultDelta * 1000U) / elapsedMs : 0;
+    const uint32_t echoHz        = elapsedMs > 0 ? (echoDelta * 1000U) / elapsedMs : 0;
 
     EspNowNode::Node* target = currentEspNowTarget();
 
@@ -227,11 +232,11 @@ void EspNowEchoController::logEspNowStats() {
         static_cast<unsigned long>(m_espNowNoTargetCount),
         static_cast<unsigned long>(m_espNowTargetResetCount));
 
-    m_lastEspNowStatsMs = nowMs;
-    m_lastEspNowStatsTxCount = m_espNowTxCommandCount;
+    m_lastEspNowStatsMs             = nowMs;
+    m_lastEspNowStatsTxCount        = m_espNowTxCommandCount;
     m_lastEspNowStatsRxCommandCount = m_espNowRxCommandCount;
-    m_lastEspNowStatsRxResultCount = m_espNowRxResultCount;
-    m_lastEspNowStatsEchoCount = m_espNowTxEchoCount;
+    m_lastEspNowStatsRxResultCount  = m_espNowRxResultCount;
+    m_lastEspNowStatsEchoCount      = m_espNowTxEchoCount;
 }
 
 const char* EspNowEchoController::espNowNodeDisplayName(const EspNowNode::Node& node) const {
@@ -265,9 +270,15 @@ void EspNowEchoController::markEspNowActivity() {
     m_lastEspNowActivityMs = millis();
 }
 
-void EspNowEchoController::updateAuxLed() {
-    const uint32_t nowMs = millis();
-    const bool espNowActive = nowMs - m_lastEspNowActivityMs <= m_config.activityLedWindowMs;
+void EspNowEchoController::updateLed() {
+    const uint32_t nowMs        = millis();
+    const bool     espNowActive = nowMs - m_lastEspNowActivityMs <= m_config.activityLedWindowMs;
+
+#if PRTN_NODE_PROFILE == PRTN_NODE_PROFILE_M3
+    m_ledMain.setState(m_espNowNode.isNodeOnlineById("AMA-10") ? LED::State::DIGITAL_HIGH : LED::State::DIGITAL_LOW);
+#elif PRTN_NODE_PROFILE == PRTN_NODE_PROFILE_AMA10
+    m_ledMain.setState(m_espNowNode.isNodeOnlineById("M3") ? LED::State::DIGITAL_HIGH : LED::State::DIGITAL_LOW);
+#endif
 
     m_ledAux.updateByIntervalMs(
         espNowActive ? m_config.activityLedIntervalMs : 1000);

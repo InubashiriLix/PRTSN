@@ -4,15 +4,15 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/cfg/ServiceConfig.h"
+#include "src/cfg/AppConfig.h"
 
 struct MqttServerConfig
 {
-    static constexpr uint8_t  MaxClientsLimit       = PRTN_MQTT_SERVER_MAX_CLIENTS_NUM;
-    static constexpr uint8_t  MaxSubscriptionsLimit = PRTN_MQTT_SERVER_MAX_SUBSCRIPTIONS_NUM;
-    static constexpr uint16_t MaxPacketSizeLimit    = PRTN_MQTT_PACKET_BUFFER_SIZE;
+    static constexpr uint8_t  MaxClientsLimit       = AppConfig::Mqtt::ServerMaxClients;
+    static constexpr uint8_t  MaxSubscriptionsLimit = AppConfig::Mqtt::ServerMaxSubscriptions;
+    static constexpr uint16_t MaxPacketSizeLimit    = AppConfig::Mqtt::PacketBufferSize;
 
-    uint16_t port                      = PRTN_MQTT_SERVER_PORT;
+    uint16_t port                      = AppConfig::Mqtt::ServerPort;
     uint8_t  maxClients                = MaxClientsLimit;
     uint8_t  maxSubscriptions          = MaxSubscriptionsLimit;
     uint16_t maxPacketSize             = MaxPacketSizeLimit;
@@ -28,10 +28,10 @@ struct MqttClientConfig
     const char* username = nullptr;
     const char* password = nullptr;
 
-    uint16_t keepAliveSec        = PRTN_MQTT_CLIENT_KEEP_ALIVE_SEC;
+    uint16_t keepAliveSec        = AppConfig::Mqtt::ClientKeepAliveSec;
     bool     cleanSession        = true;
-    uint16_t maxPacketSize       = PRTN_MQTT_CLIENT_MAX_PACKET_SIZE;
-    uint32_t reconnectIntervalMs = PRTN_MQTT_CLIENT_RECONNECT_MS;
+    uint16_t maxPacketSize       = AppConfig::Mqtt::ClientMaxPacketSize;
+    uint32_t reconnectIntervalMs = AppConfig::Mqtt::ClientReconnectMs;
 };
 
 struct MqttPacket

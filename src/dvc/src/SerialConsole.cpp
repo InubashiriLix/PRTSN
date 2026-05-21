@@ -1,7 +1,5 @@
 #include "../inc/SerialConsole.h"
 
-#include "../../cfg/BoardConfig.h"
-#include "../../cfg/BuildConfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 

@@ -1,109 +1,145 @@
 #include "src/app/inc/PrtnApp.h"
 
-#include "src/cfg/BoardConfig.h"
-#include "src/cfg/BuildConfig.h"
-#include "src/cfg/ServiceConfig.h"
+#include "src/cfg/AppConfig.h"
 #include "src/ctl/inc/EspNowEchoController.h"
-#include "src/ctl/inc/HeartbeatController.h"
-#include "src/ctl/inc/NodeController.h"
 #include "src/dom/NodeInfo.h"
-#include "src/tsk/inc/PrtnTasks.h"
 
 #include <Arduino.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 namespace
 {
+    constexpr TickType_t  EspNowTaskPeriodTicks = pdMS_TO_TICKS(AppConfig::Runtime::AppLoopIntervalMs);
+    constexpr uint32_t    EspNowTaskStackWords  = AppConfig::Runtime::EspNowTaskStackWords;
+    constexpr UBaseType_t EspNowTaskPriority    = AppConfig::Runtime::EspNowTaskPriority;
+
+    constexpr TickType_t  HeartbeatTaskPeriodTicks = pdMS_TO_TICKS(AppConfig::Runtime::HeartbeatIntervalMs);
+    constexpr uint32_t    HeartbeatTaskStackWords  = AppConfig::Runtime::HeartbeatTaskStackWords;
+    constexpr UBaseType_t HeartbeatTaskPriority    = AppConfig::Runtime::HeartbeatTaskPriority;
+
+    TaskHandle_t espNowTaskHandle    = nullptr;
+    TaskHandle_t heartbeatTaskHandle = nullptr;
+
     static NodeInfo nodeInfo {
-        PRTN_PROJECT_NAME,
-        PRTN_PROJECT_FULL_NAME,
-        PRTN_BOARD_NAME,
-        PRTN_VERSION_STRING,
-        PRTN_NODE_NAME,
-        PRTN_NODE_ID,
+        AppConfig::Identity::ProjectName,
+        AppConfig::Identity::ProjectFullName,
+        AppConfig::Identity::BoardName,
+        AppConfig::Identity::VersionString,
+        AppConfig::Identity::NodeName,
+        AppConfig::Identity::NodeId,
         BOOTING,
     };
 
-    static SerialConsole console;
-    static LED           ledMain(PRTN_LED_PIN, LED::State::DIGITAL_HIGH);
-    static LED           ledAux(PRTN_LED_PIN_AUX, LED::State::DIGITAL_LOW);
-
-    static NodeController::Config nodeControllerConfig {
-        .updateWifi = PRTN_NODE_CONTROLLER_UPDATE_WIFI != 0,
-        .logWifiStatus = PRTN_NODE_CONTROLLER_WIFI_STATUS_LOG != 0,
-        .wifiUpdateIntervalMs = 400,
-        .wifiStatusLogIntervalMs = 1000,
-    };
+    static SerialConsole console(AppConfig::Hardware::SerialBaudrate);
+    static LED           ledMain(AppConfig::Hardware::LedMainPin, LED::State::DIGITAL_HIGH);
+    static LED           ledAux(AppConfig::Hardware::LedAuxPin, LED::State::DIGITAL_LOW);
 
     static Wifi::Config wifiConfig {
-        .mode = PRTN_WIFI_MODE,
+        .mode = AppConfig::Network::WifiMode,
         .sta  = {
-            .ssid        = PRTN_WIFI_STA_SSID,
-            .password    = PRTN_WIFI_STA_PASSWORD,
-            .hostname    = PRTN_WIFI_STA_HOSTNAME,
-            .reconnectMs = PRTN_WIFI_STA_RECONNECT_MS,
-            .connect     = PRTN_WIFI_STA_CONNECT != 0,
-            .channel     = PRTN_WIFI_STA_CHANNEL},
+            .ssid        = AppConfig::Network::StaSsid,
+            .password    = AppConfig::Network::StaPassword,
+            .hostname    = AppConfig::Identity::NodeId,
+            .reconnectMs = AppConfig::Network::StaReconnectMs,
+            .connect     = AppConfig::Network::StaConnect,
+            .channel     = AppConfig::Network::StaChannel},
         .ap = {}};
 
     static Wifi wifi(wifiConfig);
 
-    EspNowNode::Config espNowConfig {
-        .localNodeId         = PRTN_NODE_ID,
-        .localNodeName       = PRTN_NODE_NAME,
-        .channel             = PRTN_WIFI_STA_CHANNEL,
-        .discoveryIntervalMs = PRTN_ESPNOW_DISCOVERY_INTERVAL_MS,
-        .heartbeatIntervalMs = PRTN_ESPNOW_HEARTBEAT_INTERVAL_MS,
-        .staleTimeoutMs      = 5000,
-        .offlineTimeoutMs    = 15000,
-        .ackTimeoutMs        = 300,
-        .maxRetries          = 3,
+    static EspNowNode::Config espNowConfig {
+        .localNodeId         = AppConfig::Identity::NodeId,
+        .localNodeName       = AppConfig::Identity::NodeName,
+        .channel             = AppConfig::Network::StaChannel,
+        .discoveryIntervalMs = AppConfig::EspNow::DiscoveryIntervalMs,
+        .heartbeatIntervalMs = AppConfig::EspNow::HeartbeatIntervalMs,
+        .staleTimeoutMs      = AppConfig::EspNow::StaleTimeoutMs,
+        .offlineTimeoutMs    = AppConfig::EspNow::OfflineTimeoutMs,
+        .ackTimeoutMs        = AppConfig::EspNow::AckTimeoutMs,
+        .maxRetries          = AppConfig::EspNow::MaxRetries,
     };
 
     static EspNowEchoController::Config espNowEchoConfig {
-        .localNodeId = PRTN_NODE_ID,
-        .localNodeName = PRTN_NODE_NAME,
-        .enableSender = PRTN_ESPNOW_ECHO_ENABLE_SENDER != 0,
-        .enableReceiver = PRTN_ESPNOW_ECHO_ENABLE_RECEIVER != 0,
-        .useAck = PRTN_ESPNOW_ECHO_USE_ACK != 0,
-        .verboseLog = PRTN_ESPNOW_ECHO_VERBOSE_LOG != 0,
-        .statsLog = PRTN_ESPNOW_ECHO_STATS_LOG != 0,
-        .payloadLen = PRTN_ESPNOW_ECHO_PAYLOAD_LEN,
-        .sendIntervalMs = PRTN_ESPNOW_ECHO_SEND_INTERVAL_MS,
-        .statsLogIntervalMs = PRTN_ESPNOW_ECHO_STATS_LOG_INTERVAL_MS,
-        .activityLedWindowMs = PRTN_ESPNOW_ECHO_ACTIVITY_LED_WINDOW_MS,
-        .activityLedIntervalMs = PRTN_ESPNOW_ECHO_ACTIVITY_LED_INTERVAL_MS,
+        .localNodeId           = AppConfig::Identity::NodeId,
+        .localNodeName         = AppConfig::Identity::NodeName,
+        .enableSender          = AppConfig::EspNowEcho::Sender,
+        .enableReceiver        = AppConfig::EspNowEcho::Receiver,
+        .useAck                = AppConfig::EspNowEcho::UseAck,
+        .verboseLog            = AppConfig::EspNowEcho::VerboseLog,
+        .statsLog              = AppConfig::EspNowEcho::StatsLog,
+        .payloadLen            = AppConfig::EspNowEcho::PayloadLen,
+        .sendIntervalMs        = AppConfig::EspNowEcho::SendIntervalMs,
+        .statsLogIntervalMs    = AppConfig::EspNowEcho::StatsLogIntervalMs,
+        .activityLedWindowMs   = AppConfig::EspNowEcho::ActivityLedWindowMs,
+        .activityLedIntervalMs = AppConfig::EspNowEcho::ActivityLedIntervalMs,
     };
 
-    static EspNowEchoController espNowEchoController(EspNowNode::instance(), ledAux, console, espNowEchoConfig);
-    static NodeController       nodeController(nodeInfo, console, wifi, espNowConfig, espNowEchoController, nodeControllerConfig);
-    static HeartbeatController  heartbeatController(nodeInfo, ledMain, console);
+    static EspNowEchoController espNowEchoController(EspNowNode::instance(), ledMain, ledAux, console, espNowEchoConfig);
+
+    void espNowTaskEntry(void*) {
+        TickType_t taskLastWakeTime = xTaskGetTickCount();
+
+        for (;;) {
+            wifi.update();
+            espNowEchoController.update();
+            vTaskDelayUntil(&taskLastWakeTime, EspNowTaskPeriodTicks);
+        }
+    }
+
+    bool startEspNowTask() {
+        if (espNowTaskHandle != nullptr) {
+            return true;
+        }
+
+        const BaseType_t ok = xTaskCreate(
+            espNowTaskEntry,
+            "espnow_echo",
+            EspNowTaskStackWords,
+            nullptr,
+            EspNowTaskPriority,
+            &espNowTaskHandle);
+
+        if (ok != pdPASS) {
+            espNowTaskHandle = nullptr;
+            nodeInfo.updateNodeState(ERROR);
+            console.error("failed to create esp-now task");
+            return false;
+        }
+
+        return true;
+    }
+
 } // namespace
 
 void PrtnApp::setup() {
     console.setup();
     console.printBootBanner(nodeInfo);
 
-    const bool nodeControllerReady = nodeController.setup();
-    if (!nodeControllerReady) {
-        console.error("failed to setup node controller");
+    if (!wifi.begin()) {
+        nodeInfo.updateNodeState(ERROR);
+        console.error("failed to start wifi");
+        return;
     }
 
+    if (!EspNowNode::instance().setup(&wifi, espNowConfig)) {
+        nodeInfo.updateNodeState(ERROR);
+        console.error("failed to start esp-now node");
+        return;
+    }
+
+    if (!espNowEchoController.setup()) {
+        nodeInfo.updateNodeState(ERROR);
+        console.error("failed to setup esp-now echo controller");
+        return;
+    }
+
+    nodeInfo.updateNodeState(RUNNING);
     console.printState(nodeInfo.getNodeState());
 
-    const bool heartbeatReady = heartbeatController.setup();
-    if (!heartbeatReady) {
-        console.error("failed to setup heartbeat controller");
-    }
-
-    if (nodeControllerReady && !PrtnTasks::startNode(nodeController, nodeInfo, console)) {
-        console.error("failed to start node task");
-    }
-
-    if (heartbeatReady && !PrtnTasks::startHeartbeat(heartbeatController, nodeInfo, console)) {
-        console.error("failed to start heartbeat task");
-    }
+    startEspNowTask();
 }
 
 void PrtnApp::idle() {
-    delay(PRTN_LOOP_INTERVAL_MS);
+    delay(AppConfig::Runtime::AppLoopIntervalMs);
 }

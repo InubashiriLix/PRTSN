@@ -3,7 +3,7 @@
 
 #include "src/prt/MqttProtocol.h"
 
-#include "src/cfg/ServiceConfig.h"
+#include "src/cfg/AppConfig.h"
 
 #include <WiFi.h>
 #include <cstddef>
@@ -92,7 +92,7 @@ private:
     MqttClientConfig m_config;
     WiFiClient       m_tcp;
 
-    uint8_t    m_packetBuffer[PRTN_MQTT_PACKET_BUFFER_SIZE] = {};
+    uint8_t    m_packetBuffer[AppConfig::Mqtt::ClientPacketBufferSize] = {};
     MqttPacket m_packet;
 
     MessageHandler m_handler;

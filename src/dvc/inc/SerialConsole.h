@@ -3,12 +3,14 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/cfg/BoardConfig.h"
 #include "src/dom/NodeInfo.h"
 #include "freertos/idf_additions.h"
 
 class SerialConsole
 {
+public:
+    static constexpr uint32_t DefaultBaudrate = 115200;
+
 private:
     uint32_t m_baudrate;
     uint32_t m_updateMs;
@@ -19,7 +21,7 @@ private:
     void              unlock();
 
 public:
-    SerialConsole(uint32_t baudrate = PRTN_SERIAL_BAUD);
+    SerialConsole(uint32_t baudrate = DefaultBaudrate);
 
     bool setup();
     bool setup(unsigned long baud);

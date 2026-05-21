@@ -13,10 +13,16 @@
 class EspNowNode
 {
 public:
-    static constexpr uint8_t MaxNodes = 16;
-    static constexpr uint8_t EventQueueCapacity = 8;
-    static constexpr size_t  NodeIdLen = 32;
-    static constexpr size_t  NodeNameLen = 32;
+    static constexpr uint8_t  MaxNodes                   = 16;
+    static constexpr uint8_t  EventQueueCapacity         = 8;
+    static constexpr size_t   NodeIdLen                  = 32;
+    static constexpr size_t   NodeNameLen                = 32;
+    static constexpr uint32_t DefaultDiscoveryIntervalMs = 1000;
+    static constexpr uint32_t DefaultHeartbeatIntervalMs = 2000;
+    static constexpr uint32_t DefaultStaleTimeoutMs      = 5000;
+    static constexpr uint32_t DefaultOfflineTimeoutMs    = 15000;
+    static constexpr uint32_t DefaultAckTimeoutMs        = 300;
+    static constexpr uint8_t  DefaultMaxRetries          = 3;
 
     enum class NodeState : uint8_t
     {
@@ -30,15 +36,15 @@ public:
 
     struct Config
     {
-        const char* localNodeId = nullptr;
-        const char* localNodeName = nullptr;
-        uint8_t     channel = 0;
-        uint32_t    discoveryIntervalMs = 1000;
-        uint32_t    heartbeatIntervalMs = 2000;
-        uint32_t    staleTimeoutMs = 5000;
-        uint32_t    offlineTimeoutMs = 15000;
-        uint32_t    ackTimeoutMs = 300;
-        uint8_t     maxRetries = 3;
+        const char* localNodeId         = nullptr;
+        const char* localNodeName       = nullptr;
+        uint8_t     channel             = 0;
+        uint32_t    discoveryIntervalMs = DefaultDiscoveryIntervalMs;
+        uint32_t    heartbeatIntervalMs = DefaultHeartbeatIntervalMs;
+        uint32_t    staleTimeoutMs      = DefaultStaleTimeoutMs;
+        uint32_t    offlineTimeoutMs    = DefaultOfflineTimeoutMs;
+        uint32_t    ackTimeoutMs        = DefaultAckTimeoutMs;
+        uint8_t     maxRetries          = DefaultMaxRetries;
     };
 
     struct Node
@@ -48,19 +54,19 @@ public:
         char nodeId[NodeIdLen] {};
         char nodeName[NodeNameLen] {};
 
-        NodeState state = NodeState::UNKNOWN;
-        bool      active = false;
+        NodeState state          = NodeState::UNKNOWN;
+        bool      active         = false;
         bool      peerRegistered = false;
 
-        uint32_t lastSeenMs = 0;
+        uint32_t lastSeenMs      = 0;
         uint32_t lastHeartbeatMs = 0;
 
         uint16_t lastRxSeq = 0;
         uint16_t nextTxSeq = 1;
 
         uint16_t pendingAckSeq = 0;
-        uint8_t  retryCount = 0;
-        uint32_t lastTxMs = 0;
+        uint8_t  retryCount    = 0;
+        uint32_t lastTxMs      = 0;
 
         uint8_t lastTxPacket[EspNowProtocol::MaxPacketLen] {};
         size_t  lastTxLen = 0;
@@ -89,10 +95,10 @@ public:
 public:
     static EspNowNode& instance();
 
-    EspNowNode(const EspNowNode&) = delete;
+    EspNowNode(const EspNowNode&)            = delete;
     EspNowNode& operator=(const EspNowNode&) = delete;
 
-    EspNowNode(EspNowNode&&) = delete;
+    EspNowNode(EspNowNode&&)            = delete;
     EspNowNode& operator=(EspNowNode&&) = delete;
 
     bool setup(Wifi* wifi);
@@ -106,6 +112,7 @@ public:
 
     bool addNode(const EspNow::Peer& peer, const char* nodeId = nullptr, const char* nodeName = nullptr);
     bool removeNodeByMac(const uint8_t* mac);
+    bool isNodeOnlineById(const char* nodeId) const;
 
     Node*       findNodeByMac(const uint8_t* mac);
     const Node* findNodeByMac(const uint8_t* mac) const;
@@ -142,18 +149,18 @@ private:
     void updateNodeTimeouts();
     void updateRetries();
 
-    Node* allocNode(const uint8_t* mac);
-    bool  registerPeer(Node& node);
-    bool  sendPacket(Node* node,
-                     EspNowProtocol::Type type,
-                     const uint8_t* payload,
-                     size_t payloadLen,
-                     uint8_t flags = EspNowProtocol::FLAG_NONE,
-                     uint16_t ackSeq = 0);
-    bool  sendAck(Node& node, uint16_t ackSeq);
-    bool  sendNodeInfo(Node& node);
+    Node*  allocNode(const uint8_t* mac);
+    bool   registerPeer(Node& node);
+    bool   sendPacket(Node*                node,
+                      EspNowProtocol::Type type,
+                      const uint8_t*       payload,
+                      size_t               payloadLen,
+                      uint8_t              flags  = EspNowProtocol::FLAG_NONE,
+                      uint16_t             ackSeq = 0);
+    bool   sendAck(Node& node, uint16_t ackSeq);
+    bool   sendNodeInfo(Node& node);
     size_t buildLocalNodeInfoPayload(uint8_t* out, size_t outCapacity);
-    void  applyNodeInfoPayload(Node& node, const EspNowProtocol::Packet& packet);
+    void   applyNodeInfoPayload(Node& node, const EspNowProtocol::Packet& packet);
 
     uint16_t nextSeq();
     void     pushEvent(EventType type, const Node& node, const EspNowProtocol::Packet& packet);
@@ -171,14 +178,14 @@ private:
     size_t       m_nodeCount = 0;
 
     uint8_t  m_txBuffer[EspNowProtocol::MaxPacketLen] {};
-    uint16_t m_nextSeq = 1;
-    bool     m_initialized = false;
+    uint16_t m_nextSeq         = 1;
+    bool     m_initialized     = false;
     uint32_t m_lastDiscoveryMs = 0;
     uint32_t m_lastHeartbeatMs = 0;
 
-    Event   m_eventQueue[EventQueueCapacity] {};
-    uint8_t m_eventHead = 0;
-    uint8_t m_eventTail = 0;
-    uint8_t m_eventCount = 0;
-    mutable portMUX_TYPE m_eventMux = portMUX_INITIALIZER_UNLOCKED;
+    Event                m_eventQueue[EventQueueCapacity] {};
+    uint8_t              m_eventHead  = 0;
+    uint8_t              m_eventTail  = 0;
+    uint8_t              m_eventCount = 0;
+    mutable portMUX_TYPE m_eventMux   = portMUX_INITIALIZER_UNLOCKED;
 };

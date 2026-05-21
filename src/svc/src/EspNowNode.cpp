@@ -49,7 +49,7 @@ void EspNowNode::update() {
 }
 
 bool EspNowNode::broadcastDiscovery() {
-    uint8_t payload[NodeIdLen + NodeNameLen] {};
+    uint8_t      payload[NodeIdLen + NodeNameLen] {};
     const size_t payloadLen = buildLocalNodeInfoPayload(payload, sizeof(payload));
 
     return sendPacket(
@@ -146,6 +146,11 @@ bool EspNowNode::removeNodeByMac(const uint8_t* mac) {
         --m_nodeCount;
     }
     return true;
+}
+
+bool EspNowNode::isNodeOnlineById(const char* nodeId) const {
+    auto node = findNodeById(nodeId);
+    return node != nullptr && node->state != NodeState::OFFLINE && node->state != NodeState::ERROR;
 }
 
 EspNowNode::Node* EspNowNode::findNodeByMac(const uint8_t* mac) {
@@ -251,7 +256,7 @@ bool EspNowNode::popEvent(Event& outEvent) {
         return false;
     }
 
-    outEvent = m_eventQueue[m_eventTail];
+    outEvent    = m_eventQueue[m_eventTail];
     m_eventTail = static_cast<uint8_t>((m_eventTail + 1) % EventQueueCapacity);
     --m_eventCount;
     portEXIT_CRITICAL(&m_eventMux);
@@ -567,7 +572,7 @@ bool EspNowNode::sendAck(Node& node, uint16_t ackSeq) {
 }
 
 bool EspNowNode::sendNodeInfo(Node& node) {
-    uint8_t payload[NodeIdLen + NodeNameLen] {};
+    uint8_t      payload[NodeIdLen + NodeNameLen] {};
     const size_t payloadLen = buildLocalNodeInfoPayload(payload, sizeof(payload));
 
     return sendPacket(
@@ -592,7 +597,7 @@ size_t EspNowNode::buildLocalNodeInfoPayload(uint8_t* out, size_t outCapacity) {
         return outCapacity;
     }
 
-    char*        name = reinterpret_cast<char*>(out + idLen + 1);
+    char*        name         = reinterpret_cast<char*>(out + idLen + 1);
     const size_t nameCapacity = outCapacity - idLen - 1;
     copyText(name, nameCapacity, m_config.localNodeName);
 
@@ -636,14 +641,14 @@ void EspNowNode::pushEvent(EventType type, const Node& node, const EspNowProtoco
     const size_t payloadLen = packet.payloadLen <= sizeof(event.payload)
                                   ? packet.payloadLen
                                   : sizeof(event.payload);
-    event.payloadLen = payloadLen;
+    event.payloadLen        = payloadLen;
     if (payloadLen > 0 && packet.payload != nullptr) {
         std::memcpy(event.payload, packet.payload, payloadLen);
     }
 
     portENTER_CRITICAL(&m_eventMux);
     m_eventQueue[m_eventHead] = event;
-    m_eventHead = static_cast<uint8_t>((m_eventHead + 1) % EventQueueCapacity);
+    m_eventHead               = static_cast<uint8_t>((m_eventHead + 1) % EventQueueCapacity);
     if (m_eventCount < EventQueueCapacity) {
         ++m_eventCount;
         portEXIT_CRITICAL(&m_eventMux);
