@@ -7,7 +7,7 @@
 #include "src/cfg/ProjectConfig.h"
 #include "src/ctl/inc/EspNowEchoController.h"
 #include "src/dvc/inc/LED.h"
-#include "src/dvc/inc/SerialConsole.h"
+#include "src/dvc/inc/Serial.h"
 #include "src/svc/inc/EspNowNode.h"
 #include "src/svc/inc/wifi.h"
 
@@ -49,7 +49,7 @@ struct AppConfig
     {
         static constexpr uint8_t LedMainPin = LED::DefaultMainPin;
         static constexpr uint8_t LedAuxPin = LED::DefaultAuxPin;
-        static constexpr uint32_t SerialBaudrate = SerialConsole::DefaultBaudrate;
+        static constexpr uint32_t SerialBaudrate = dvc::Serial::DefaultBaudrate;
     };
 
     struct Network

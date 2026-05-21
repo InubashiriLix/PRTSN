@@ -3,11 +3,11 @@
 
 #include <cstring>
 
-EspNowEchoController::EspNowEchoController(EspNowNode&    espNowNode,
-                                           LED&           ledMain,
-                                           LED&           ledAux,
-                                           SerialConsole& console,
-                                           const Config&  config)
+EspNowEchoController::EspNowEchoController(EspNowNode&           espNowNode,
+                                           LED&                  ledMain,
+                                           LED&                  ledAux,
+                                           SerialConsoleService& console,
+                                           const Config&         config)
     : m_espNowNode(espNowNode),
       m_ledMain(ledMain),
       m_ledAux(ledAux),
@@ -16,6 +16,12 @@ EspNowEchoController::EspNowEchoController(EspNowNode&    espNowNode,
 
 bool EspNowEchoController::setup() {
     m_ledAux.setup();
+    m_ledMain.setup();
+    m_console.registerCommand(
+        "espnow",
+        cmdEspNowHandler,
+        this,
+        "EspNowService: cmd[stats|node-id|node-name]");
     return true;
 }
 
@@ -30,7 +36,7 @@ void EspNowEchoController::update() {
     const uint32_t nowMs = millis();
 
     updateLed();
-    logEspNowStats();
+    logEspNowStats(m_config.statsLog);
 
     if (!m_config.enableSender) {
         return;
@@ -186,25 +192,20 @@ void EspNowEchoController::logEspNowPayload(const char* prefix, const uint8_t* p
         return;
     }
 
-    m_console.printf("[log] %s:", prefix);
-    for (size_t i = 0; i < len; ++i) {
-        m_console.printf(" %02X", payload[i]);
-    }
-    m_console.println();
+    m_console.hexDump(prefix, payload, len);
 }
 
-void EspNowEchoController::logEspNowStats() {
-    if (!m_config.statsLog) {
+void EspNowEchoController::logEspNowStats(bool verbose, bool force) {
+    if (!verbose)
         return;
-    }
 
     const uint32_t nowMs = millis();
-    if (nowMs - m_lastEspNowStatsMs < m_config.statsLogIntervalMs) {
+    if (!force && nowMs - m_lastEspNowStatsMs < m_config.statsLogIntervalMs) {
         return;
     }
 
     const uint32_t elapsedMs     = m_lastEspNowStatsMs == 0
-                                       ? m_config.statsLogIntervalMs
+                                       ? nowMs
                                        : nowMs - m_lastEspNowStatsMs;
     const uint32_t txDelta       = m_espNowTxCommandCount - m_lastEspNowStatsTxCount;
     const uint32_t rxCmdDelta    = m_espNowRxCommandCount - m_lastEspNowStatsRxCommandCount;
@@ -282,4 +283,36 @@ void EspNowEchoController::updateLed() {
 
     m_ledAux.updateByIntervalMs(
         espNowActive ? m_config.activityLedIntervalMs : 1000);
+}
+
+void EspNowEchoController::cmdEspNowHandler(SerialConsoleService&, const char* args, void* context) {
+    EspNowEchoController* controller = static_cast<EspNowEchoController*>(context);
+    if (controller == nullptr) {
+        return;
+    }
+
+    if (args == nullptr) {
+        args = "";
+    }
+
+    if (strcmp(args, "stats") == 0) {
+        controller->logEspNowStats(true, true);
+        return;
+    }
+
+    if (strcmp(args, "node-id") == 0) {
+        controller->m_console.info(
+            "espnow node-id: %s",
+            controller->m_config.localNodeId != nullptr ? controller->m_config.localNodeId : "-");
+        return;
+    }
+
+    if (strcmp(args, "node-name") == 0) {
+        controller->m_console.info(
+            "espnow node-name: %s",
+            controller->m_config.localNodeName != nullptr ? controller->m_config.localNodeName : "-");
+        return;
+    }
+
+    controller->m_console.info("usage: espnow stats|node-id|node-name");
 }
