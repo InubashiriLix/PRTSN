@@ -1,8 +1,8 @@
 #pragma once
 
 #include "src/dvc/inc/LED.h"
-#include "src/dvc/inc/SerialConsole.h"
 #include "src/svc/inc/EspNowNode.h"
+#include "src/svc/inc/SerialConsoleService.h"
 
 #include <Arduino.h>
 #include <cstddef>
@@ -18,7 +18,7 @@ public:
     static constexpr uint32_t DefaultActivityLedIntervalMs = 60;
     static constexpr bool     DefaultUseAck                = false;
     static constexpr bool     DefaultVerboseLog            = false;
-    static constexpr bool     DefaultStatsLog              = true;
+    static constexpr bool     DefaultStatsLog              = false;
 
     struct Config
     {
@@ -39,11 +39,11 @@ public:
     };
 
 private:
-    EspNowNode&    m_espNowNode;
-    LED&           m_ledMain;
-    LED&           m_ledAux;
-    SerialConsole& m_console;
-    Config         m_config;
+    EspNowNode&           m_espNowNode;
+    LED&                  m_ledMain;
+    LED&                  m_ledAux;
+    SerialConsoleService& m_console;
+    Config                m_config;
 
     uint32_t m_lastEspNowSendMs              = 0;
     uint32_t m_lastEspNowActivityMs          = 0;
@@ -66,7 +66,11 @@ private:
     bool    m_hasEspNowTarget = false;
 
 public:
-    EspNowEchoController(EspNowNode& espNowNode, LED& ledMain, LED& ledAux, SerialConsole& console, const Config& config);
+    EspNowEchoController(EspNowNode&           espNowNode,
+                         LED&                  ledMain,
+                         LED&                  ledAux,
+                         SerialConsoleService& console,
+                         const Config&         config);
 
     bool setup();
     void update();
@@ -77,10 +81,12 @@ private:
     EspNowNode::Node* currentEspNowTarget();
     void              fillEspNowTestPayload(uint8_t* payload, size_t len);
     void              logEspNowPayload(const char* prefix, const uint8_t* payload, size_t len);
-    void              logEspNowStats();
+    void              logEspNowStats(bool verbose = DefaultStatsLog, bool force = false);
     const char*       espNowNodeDisplayName(const EspNowNode::Node& node) const;
     const char*       espNowEventDisplayName(const EspNowNode::Event& event) const;
     char              espNowNodeStateCode(const EspNowNode::Node& node) const;
     void              markEspNowActivity();
     void              updateLed();
+
+    static void cmdEspNowHandler(SerialConsoleService& service, const char* args, void* context);
 };

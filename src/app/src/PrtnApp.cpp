@@ -3,10 +3,16 @@
 #include "src/cfg/AppConfig.h"
 #include "src/ctl/inc/EspNowEchoController.h"
 #include "src/dom/NodeInfo.h"
+#include "src/dvc/inc/Serial.h"
+#include "src/svc/inc/SerialConsoleService.h"
 
 #include <Arduino.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+
+#ifdef Serial
+#undef Serial
+#endif
 
 namespace
 {
@@ -31,9 +37,10 @@ namespace
         BOOTING,
     };
 
-    static SerialConsole console(AppConfig::Hardware::SerialBaudrate);
-    static LED           ledMain(AppConfig::Hardware::LedMainPin, LED::State::DIGITAL_HIGH);
-    static LED           ledAux(AppConfig::Hardware::LedAuxPin, LED::State::DIGITAL_LOW);
+    static dvc::Serial          serial(AppConfig::Hardware::SerialBaudrate);
+    static SerialConsoleService console(serial);
+    static LED                  ledMain(AppConfig::Hardware::LedMainPin, LED::State::DIGITAL_HIGH);
+    static LED                  ledAux(AppConfig::Hardware::LedAuxPin, LED::State::DIGITAL_LOW);
 
     static Wifi::Config wifiConfig {
         .mode = AppConfig::Network::WifiMode,
@@ -81,6 +88,7 @@ namespace
         TickType_t taskLastWakeTime = xTaskGetTickCount();
 
         for (;;) {
+            console.updateCommandResponse();
             wifi.update();
             espNowEchoController.update();
             vTaskDelayUntil(&taskLastWakeTime, EspNowTaskPeriodTicks);

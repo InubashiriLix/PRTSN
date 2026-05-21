@@ -43,9 +43,9 @@ prtn/
     │   └── NodeInfo.cpp
     ├── dvc/
     │   ├── inc/LED.h
-    │   ├── inc/SerialConsole.h
+    │   ├── inc/Serial.h
     │   ├── src/LED.cpp
-    │   └── src/SerialConsole.cpp
+    │   └── src/Serial.cpp
     ├── fw/
     │   └── README.md
     ├── svc/
