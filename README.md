@@ -4,7 +4,7 @@
 
 This is a layered Arduino CLI project for the **AirM2M CORE ESP32-C3** board.
 
-The goal is to keep hardware capabilities, concrete devices, services, algorithms, and task orchestration separated enough that the project can grow without turning every module into a dependency hub.
+The goal is to keep hardware capabilities, concrete devices, services, algorithms, and app orchestration separated enough that the project can grow without turning every module into a dependency hub.
 
 ## Board
 
@@ -18,14 +18,25 @@ esp32:esp32:AirM2M_CORE_ESP32C3
 
 ```text
 prtn/
-├── prtn.ino
+├── PRTN.ino
 ├── Makefile
 ├── README.md
+├── config/
+│   ├── project.mk
+│   └── local.mk
 └── src/
+    ├── app/
+    │   ├── inc/PrtnApp.h
+    │   └── src/PrtnApp.cpp
+    ├── cfg/
+    │   ├── AppConfig.h
+    │   ├── BoardConfig.h
+    │   ├── BuildConfig.h
+    │   ├── ProfileConfig.h
+    │   └── ProjectConfig.h
     ├── ctl/
-    │   ├── inc/NodeController.h
     │   ├── inc/HeartbeatController.h
-    │   ├── src/NodeController.cpp
+    │   ├── inc/EspNowEchoController.h
     │   └── src/HeartbeatController.cpp
     ├── dom/
     │   ├── NodeInfo.h
@@ -40,23 +51,20 @@ prtn/
     ├── svc/
     │   └── README.md
     ├── alg/
-    │   ├── inc/Algorithm.h
     │   └── README.md
-    └── cfg/
-        ├── BoardConfig.h
-        └── BuildConfig.h
 ```
 
 ## Layer idea
 
 ```text
-ctl       -> task ownership, scheduling, orchestration, state transitions
+app       -> static object ownership, setup order, FreeRTOS task creation
+ctl       -> focused business controllers such as heartbeat or ESP-NOW echo
 dom       -> pure data and node state types
 dvc       -> concrete devices such as LEDs and serial console
 fw        -> low-level GPIO/PWM/I2C/CAN/I2S/UART/timer adapters
 svc       -> WiFi, MQTT, OTA, telemetry, time sync and other system services
 alg       -> Arduino-free numeric/control algorithms, future Eigen-backed code
-cfg       -> board/build constants
+cfg       -> profile selection and app-level constexpr configuration
 ```
 
 ## Build
@@ -74,6 +82,15 @@ config/local.mk
 ```
 
 `config/local.mk` is ignored by git. Use it for values such as `PORT`, temporary CPU frequency, debug level, or partition experiments.
+
+Node role selection is intentionally narrow:
+
+```make
+BUILD_DEFINES += -DPRTN_NODE_PROFILE=PRTN_NODE_PROFILE_AMA10
+# BUILD_DEFINES += -DPRTN_NODE_PROFILE=PRTN_NODE_PROFILE_M3
+```
+
+Most runtime defaults live in `src/cfg/AppConfig.h` or in the owning class as `static constexpr` defaults.
 
 ```bash
 make check

@@ -1,9 +1,9 @@
 #ifndef PRTN_SVC_MQTT_CLIENT_H
 #define PRTN_SVC_MQTT_CLIENT_H
 
-#include "Mqtt.h"
+#include "src/prt/MqttProtocol.h"
 
-#include "../../cfg/BoardConfig.h"
+#include "src/cfg/AppConfig.h"
 
 #include <WiFi.h>
 #include <cstddef>
@@ -48,17 +48,17 @@ public:
 
     struct Event
     {
-        EventType        type = EventType::ConnectAttempt;
+        EventType        type   = EventType::ConnectAttempt;
         DisconnectReason reason = DisconnectReason::None;
 
-        const char* host = "";
-        uint16_t port = 0;
+        const char* host     = "";
+        uint16_t    port     = 0;
         const char* clientId = "";
-        const char* topic = "";
+        const char* topic    = "";
 
-        uint16_t packetId = 0;
-        size_t payloadLen = 0;
-        uint8_t returnCode = 0;
+        uint16_t packetId   = 0;
+        size_t   payloadLen = 0;
+        uint8_t  returnCode = 0;
     };
 
     using EventHandler = std::function<void(const Event& event)>;
@@ -92,20 +92,20 @@ private:
     MqttClientConfig m_config;
     WiFiClient       m_tcp;
 
-    uint8_t    m_packetBuffer[PRTN_MQTT_PACKET_BUFFER_SIZE] = {};
+    uint8_t    m_packetBuffer[AppConfig::Mqtt::ClientPacketBufferSize] = {};
     MqttPacket m_packet;
 
     MessageHandler m_handler;
     EventHandler   m_eventHandler;
 
-    uint16_t m_nextPacketId = 1;
-    uint32_t m_lastRxMs = 0;
-    uint32_t m_lastTxMs = 0;
+    uint16_t m_nextPacketId         = 1;
+    uint32_t m_lastRxMs             = 0;
+    uint32_t m_lastTxMs             = 0;
     uint32_t m_lastConnectAttemptMs = 0;
-    bool     m_mqttConnected = false;
+    bool     m_mqttConnected        = false;
 
 private:
-    bool validConfig() const;
+    bool     validConfig() const;
     uint16_t nextPacketId();
 
     bool sendConnect();

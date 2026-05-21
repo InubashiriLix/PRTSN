@@ -46,6 +46,11 @@
 class Wifi
 {
 public:
+    static constexpr uint32_t DefaultStaReconnectMs = 5000;
+    static constexpr uint8_t  DefaultStaChannel = 1;
+    static constexpr uint8_t  DefaultApChannel = 1;
+    static constexpr uint8_t  DefaultApMaxClients = 4;
+
     enum class Mode : uint8_t
     {
         STA,
@@ -58,16 +63,18 @@ public:
         const char* ssid        = nullptr;
         const char* password    = nullptr;
         const char* hostname    = nullptr;
-        uint32_t    reconnectMs = 5000;
+        uint32_t    reconnectMs = DefaultStaReconnectMs;
+        bool        connect     = false;
+        uint8_t     channel     = DefaultStaChannel;
     };
 
     struct APConfig
     {
         const char* ssid       = nullptr;
         const char* password   = nullptr;
-        uint8_t     channel    = 1;
+        uint8_t     channel    = DefaultApChannel;
         bool        hidden     = false;
-        uint8_t     maxClients = 4;
+        uint8_t     maxClients = DefaultApMaxClients;
     };
 
     struct Config
@@ -192,4 +199,5 @@ private:
     uint8_t qualityFromRssi(int32_t rssi) const;
     bool    startAp();
     bool    startSta();
+    bool    startStaRadio();
 };

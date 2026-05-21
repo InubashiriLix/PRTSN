@@ -1,4 +1,6 @@
 #pragma once
+#ifndef PRTN_DOM_NODE_INFO_H
+#define PRTN_DOM_NODE_INFO_H
 
 #include <cstdint>
 
@@ -23,3 +25,5 @@ struct NodeInfo
     void      getNodeState(NodeState& outState) const;
     NodeState getNodeState() const;
 };
+
+#endif // PRTN_DOM_NODE_INFO_H

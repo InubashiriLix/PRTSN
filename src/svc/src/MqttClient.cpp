@@ -260,9 +260,9 @@ bool MqttClient::publish(const char* topic, const uint8_t* payload, size_t paylo
 
     const size_t topicLen = strlen(topic);
     const uint32_t remainingLength = 2 + topicLen + payloadLen;
-    const uint16_t packetLimit = m_config.maxPacketSize < PRTN_MQTT_PACKET_BUFFER_SIZE
+    const uint16_t packetLimit = m_config.maxPacketSize < AppConfig::Mqtt::ClientPacketBufferSize
                                      ? m_config.maxPacketSize
-                                     : PRTN_MQTT_PACKET_BUFFER_SIZE;
+                                     : AppConfig::Mqtt::ClientPacketBufferSize;
 
     if (remainingLength > packetLimit) {
         return false;
@@ -491,9 +491,9 @@ bool MqttClient::readPacket(MqttPacket& packet, uint32_t timeoutMs) {
         return false;
     }
 
-    const uint16_t packetLimit = m_config.maxPacketSize < PRTN_MQTT_PACKET_BUFFER_SIZE
+    const uint16_t packetLimit = m_config.maxPacketSize < AppConfig::Mqtt::ClientPacketBufferSize
                                      ? m_config.maxPacketSize
-                                     : PRTN_MQTT_PACKET_BUFFER_SIZE;
+                                     : AppConfig::Mqtt::ClientPacketBufferSize;
 
     if (packet.header.remainingLength > packetLimit) {
         return false;
