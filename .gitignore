@@ -4,3 +4,4 @@ config/local.mk
 build/
 log/
 install/
+tools/serial-tui/target/
