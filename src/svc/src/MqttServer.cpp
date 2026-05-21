@@ -604,9 +604,9 @@ void MqttServer::handleConnect(uint8_t clientIndex, const MqttPacket::Connect& c
     conn.lastSeenMs                          = millis();
 
     sendConnAck(conn, 0x00);
-    emitEvent({.type = EventType::ClientConnected,
+    emitEvent({.type        = EventType::ClientConnected,
                .clientIndex = clientIndex,
-               .clientId = conn.clientId});
+               .clientId    = conn.clientId});
 }
 
 void MqttServer::handlePublish(uint8_t clientIndex, const MqttPacket::Publish& publish) {
@@ -620,11 +620,11 @@ void MqttServer::handlePublish(uint8_t clientIndex, const MqttPacket::Publish& p
         m_handler(publish.topic, publish.payload, publish.payloadLen);
     }
 
-    emitEvent({.type = EventType::Publish,
+    emitEvent({.type        = EventType::Publish,
                .clientIndex = clientIndex,
-               .clientId = conn.clientId,
-               .topic = publish.topic,
-               .payloadLen = publish.payloadLen});
+               .clientId    = conn.clientId,
+               .topic       = publish.topic,
+               .payloadLen  = publish.payloadLen});
 
     forwardPublish(publish);
 }
@@ -632,10 +632,10 @@ void MqttServer::handlePublish(uint8_t clientIndex, const MqttPacket::Publish& p
 void MqttServer::handleSubscribe(uint8_t clientIndex, const MqttPacket::Subscribe& subscribe) {
     for (uint8_t i = 0; i < subscribe.topicCount; ++i) {
         if (addSubscription(clientIndex, subscribe.topics[i].topic)) {
-            emitEvent({.type = EventType::Subscribe,
+            emitEvent({.type        = EventType::Subscribe,
                        .clientIndex = clientIndex,
-                       .clientId = m_clients[clientIndex].clientId,
-                       .topic = subscribe.topics[i].topic});
+                       .clientId    = m_clients[clientIndex].clientId,
+                       .topic       = subscribe.topics[i].topic});
         }
     }
 
@@ -789,10 +789,10 @@ void MqttServer::closeClient(uint8_t clientIndex, DisconnectReason reason) {
     removeSubscriptions(clientIndex);
     m_clients[clientIndex].close();
 
-    emitEvent({.type = EventType::ClientDisconnected,
-               .reason = reason,
+    emitEvent({.type        = EventType::ClientDisconnected,
+               .reason      = reason,
                .clientIndex = clientIndex,
-               .clientId = clientId});
+               .clientId    = clientId});
 }
 
 void MqttServer::emitEvent(Event event) {
@@ -800,12 +800,12 @@ void MqttServer::emitEvent(Event event) {
         return;
     }
 
-    const Status status = getStatus();
-    event.port = status.port;
-    event.maxClients = status.maxClients;
-    event.activeClients = status.activeClients;
-    event.mqttClients = status.mqttClients;
-    event.maxSubscriptions = status.maxSubscriptions;
+    const Status status       = getStatus();
+    event.port                = status.port;
+    event.maxClients          = status.maxClients;
+    event.activeClients       = status.activeClients;
+    event.mqttClients         = status.mqttClients;
+    event.maxSubscriptions    = status.maxSubscriptions;
     event.activeSubscriptions = status.activeSubscriptions;
 
     m_eventHandler(event);

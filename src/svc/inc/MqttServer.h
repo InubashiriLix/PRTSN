@@ -1,7 +1,7 @@
 #ifndef PRTN_SVC_MQTT_SERVER_H
 #define PRTN_SVC_MQTT_SERVER_H
 
-#include "Mqtt.h"
+#include "src/prt/MqttProtocol.h"
 
 #include "../../cfg/BoardConfig.h"
 
@@ -43,20 +43,20 @@ public:
 
     struct Event
     {
-        EventType        type = EventType::Started;
+        EventType        type   = EventType::Started;
         DisconnectReason reason = DisconnectReason::None;
 
-        uint8_t  clientIndex = 0xFF;
-        const char* clientId = "";
-        const char* topic = "";
-        size_t payloadLen = 0;
+        uint8_t     clientIndex = 0xFF;
+        const char* clientId    = "";
+        const char* topic       = "";
+        size_t      payloadLen  = 0;
 
-        uint16_t port = 0;
-        uint8_t maxClients = 0;
-        uint8_t activeClients = 0;
-        uint8_t mqttClients = 0;
-        uint8_t maxSubscriptions = 0;
-        uint8_t activeSubscriptions = 0;
+        uint16_t port                = 0;
+        uint8_t  maxClients          = 0;
+        uint8_t  activeClients       = 0;
+        uint8_t  mqttClients         = 0;
+        uint8_t  maxSubscriptions    = 0;
+        uint8_t  activeSubscriptions = 0;
     };
 
     using EventHandler = std::function<void(const Event& event)>;
@@ -75,8 +75,8 @@ public:
     };
 
     explicit MqttServer(WiFiServer&             server,
-                        const MqttServerConfig& config  = {},
-                        MessageHandler          handler = nullptr,
+                        const MqttServerConfig& config       = {},
+                        MessageHandler          handler      = nullptr,
                         EventHandler            eventHandler = nullptr);
 
     bool begin();

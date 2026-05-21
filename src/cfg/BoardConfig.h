@@ -1,16 +1,16 @@
 #pragma once
 
-#define PRTN_PROJECT_NAME      "PRTN"
-#define PRTN_PROJECT_FULL_NAME "PRTS Node"
-#define PRTN_BOARD_NAME        "AirM2M CORE ESP32-C3"
-#define PRTN_VERSION_STRING    "0.1.0"
-#define PRTN_NODE_NAME         "PRTN-NODE"
-#define PRTN_NODE_ID           "PRTN-NODE-001"
+#include "src/cfg/ProfileConfig.h"
+#include "src/cfg/ProjectConfig.h"
 
+#define PRTN_BOARD_NAME "AirM2M CORE ESP32-C3"
+
+// Serial ---------------------------------------------------------------------
 #ifndef PRTN_SERIAL_BAUD
 #define PRTN_SERIAL_BAUD 115200
 #endif
 
+// LED ------------------------------------------------------------------------
 #ifndef PRTN_LED_PIN
 #define PRTN_LED_PIN 12
 #endif
@@ -23,6 +23,7 @@
 #define PRTN_LED_ACTIVE_HIGH 1
 #endif
 
+// I2C ------------------------------------------------------------------------
 #ifndef PRTN_IIC_SCL_PIN
 #define PRTN_IIC_SCL_PIN 5
 #endif
@@ -37,108 +38,4 @@
 
 #ifndef PRTN_IIC_TIMEOUT_MS
 #define PRTN_IIC_TIMEOUT_MS 50
-#endif
-
-#ifndef PRTN_WIFI_MODE
-#define PRTN_WIFI_MODE Wifi::Mode::STA
-#endif
-
-#ifndef PRTN_WIFI_AP_SSID
-#define PRTN_WIFI_AP_SSID "PRTN-AP-MQTT"
-#endif
-
-#ifndef PRTN_WIFI_AP_PASSWORD
-#define PRTN_WIFI_AP_PASSWORD "12345678"
-#endif
-
-#ifndef PRTN_WIFI_AP_CHANNEL
-#define PRTN_WIFI_AP_CHANNEL 1
-#endif
-
-#ifndef PRTN_WIFI_AP_MAX_CLIENTS_NUM
-#define PRTN_WIFI_AP_MAX_CLIENTS_NUM 4
-#endif
-
-#ifndef PRTN_WIFI_STA_SSID
-#define PRTN_WIFI_STA_SSID PRTN_WIFI_AP_SSID
-#endif
-
-#ifndef PRTN_WIFI_STA_PASSWORD
-#define PRTN_WIFI_STA_PASSWORD PRTN_WIFI_AP_PASSWORD
-#endif
-
-#ifndef PRTN_WIFI_STA_HOSTNAME
-#define PRTN_WIFI_STA_HOSTNAME PRTN_NODE_ID
-#endif
-
-#ifndef PRTN_WIFI_STA_RECONNECT_MS
-#define PRTN_WIFI_STA_RECONNECT_MS 5000
-#endif
-
-#ifndef PRTN_MQTT_SERVER_MAX_CLIENTS_NUM
-#define PRTN_MQTT_SERVER_MAX_CLIENTS_NUM 4
-#endif
-
-#ifndef PRTN_MQTT_SERVER_PORT
-#define PRTN_MQTT_SERVER_PORT 1883
-#endif
-
-#ifndef PRTN_MQTT_SERVER_MAX_SUBSCRIPTIONS_NUM
-#define PRTN_MQTT_SERVER_MAX_SUBSCRIPTIONS_NUM 16
-#endif
-
-#ifndef PRTN_MQTT_PACKET_BUFFER_SIZE
-#define PRTN_MQTT_PACKET_BUFFER_SIZE 256
-#endif
-
-#ifndef PRTN_MQTT_SERVER_VERBOSE_LOG
-#define PRTN_MQTT_SERVER_VERBOSE_LOG 1
-#endif
-
-#ifndef PRTN_MQTT_CLIENT_HOST
-#define PRTN_MQTT_CLIENT_HOST "192.168.4.1"
-#endif
-
-#ifndef PRTN_MQTT_CLIENT_PORT
-#define PRTN_MQTT_CLIENT_PORT 1883
-#endif
-
-#ifndef PRTN_MQTT_CLIENT_ID
-#define PRTN_MQTT_CLIENT_ID PRTN_NODE_ID "-CLIENT"
-#endif
-
-#ifndef PRTN_MQTT_CLIENT_USERNAME
-#define PRTN_MQTT_CLIENT_USERNAME nullptr
-#endif
-
-#ifndef PRTN_MQTT_CLIENT_PASSWORD
-#define PRTN_MQTT_CLIENT_PASSWORD nullptr
-#endif
-
-#ifndef PRTN_MQTT_CLIENT_KEEP_ALIVE_SEC
-#define PRTN_MQTT_CLIENT_KEEP_ALIVE_SEC 30
-#endif
-
-#ifndef PRTN_MQTT_CLIENT_MAX_PACKET_SIZE
-#define PRTN_MQTT_CLIENT_MAX_PACKET_SIZE PRTN_MQTT_PACKET_BUFFER_SIZE
-#endif
-
-#ifndef PRTN_MQTT_CLIENT_RECONNECT_MS
-#define PRTN_MQTT_CLIENT_RECONNECT_MS 5000
-#endif
-
-#ifndef PRTN_MQTT_CLIENT_TEST_TOPIC
-#define PRTN_MQTT_CLIENT_TEST_TOPIC "prtn/test/client"
-#endif
-
-#ifndef PRTN_MQTT_CLIENT_TEST_PAYLOAD
-#define PRTN_MQTT_CLIENT_TEST_PAYLOAD "{\"source\":\"" PRTN_NODE_ID "\",\"kind\":\"client-test\"}"
-#endif
-
-#ifndef PRTN_MQTT_CLIENT_TEST_PUBLISH_MS
-#define PRTN_MQTT_CLIENT_TEST_PUBLISH_MS 5000
-#endif
-
-#ifndef PRTN_MQTT_CLIENT_VERBOSE_LOG
-#define PRTN_MQTT_CLIENT_VERBOSE_LOG 1
 #endif

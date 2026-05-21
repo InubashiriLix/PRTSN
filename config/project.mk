@@ -29,8 +29,9 @@ PORT ?= /dev/ttyACM0
 BAUD ?= 115200
 
 # Optional compile-time defines passed to C and C++.
-# Example:
-#   BUILD_DEFINES := -DPRTN_WIFI_AP_SSID=\"PRTN-DEV\" -DPRTN_DEBUG_WIFI=1
+# Examples:
+#   BUILD_DEFINES := -DPRTN_NODE_PROFILE=PRTN_NODE_PROFILE_M3
+#   BUILD_DEFINES += -DPRTN_WIFI_AP_SSID=\"PRTN-DEV\"
 #
 # Feature gates:
 #   -DPRTN_ENABLE_IIC=1  Enable IIC implementation and link Arduino Wire.

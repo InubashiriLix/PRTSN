@@ -59,6 +59,8 @@ public:
         const char* password    = nullptr;
         const char* hostname    = nullptr;
         uint32_t    reconnectMs = 5000;
+        bool        connect     = false;
+        uint8_t     channel     = 1;
     };
 
     struct APConfig
@@ -192,4 +194,5 @@ private:
     uint8_t qualityFromRssi(int32_t rssi) const;
     bool    startAp();
     bool    startSta();
+    bool    startStaRadio();
 };

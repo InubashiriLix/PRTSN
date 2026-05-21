@@ -3,8 +3,8 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../../cfg/BoardConfig.h"
-#include "../../dom/NodeInfo.h"
+#include "src/cfg/BoardConfig.h"
+#include "src/dom/NodeInfo.h"
 #include "freertos/idf_additions.h"
 
 class SerialConsole
