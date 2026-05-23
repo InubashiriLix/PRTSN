@@ -1,6 +1,7 @@
 #include "src/svc/inc/wifi.h"
 
 #include <WiFi.h>
+#include <esp_wifi.h>
 
 namespace
 {
@@ -23,7 +24,7 @@ Wifi::Wifi(const Config& config) : m_config(config) {}
 bool Wifi::begin() {
     stop();
 
-    if (hasSta() && !validText(m_config.sta.ssid)) {
+    if (hasSta() && m_config.sta.connect && !validText(m_config.sta.ssid)) {
         return false;
     }
 
@@ -33,6 +34,7 @@ bool Wifi::begin() {
 
     WiFi.persistent(false);
     WiFi.mode(toEspMode(m_config.mode));
+    WiFi.setSleep(false);
 
     if (hasSta() && validText(m_config.sta.hostname)) {
         WiFi.setHostname(m_config.sta.hostname);
@@ -45,15 +47,19 @@ bool Wifi::begin() {
         return false;
     }
 
-    if (hasSta()) {
+    if (hasSta() && m_config.sta.connect) {
         return startSta();
+    }
+
+    if (hasSta()) {
+        return startStaRadio();
     }
 
     return true;
 }
 
 void Wifi::update() {
-    if (!m_started || !hasSta() || staConnected()) {
+    if (!m_started || !hasSta() || !m_config.sta.connect || staConnected()) {
         return;
     }
 
@@ -211,4 +217,15 @@ bool Wifi::startSta() {
 
     WiFi.begin(m_config.sta.ssid, m_config.sta.password);
     return true;
+}
+
+bool Wifi::startStaRadio() {
+    m_staBeginSent   = false;
+    m_lastStaBeginMs = 0;
+
+    if (m_config.sta.channel == 0) {
+        return true;
+    }
+
+    return esp_wifi_set_channel(m_config.sta.channel, WIFI_SECOND_CHAN_NONE) == ESP_OK;
 }

@@ -169,6 +169,7 @@ bool MqttClient::begin() {
 
 bool MqttClient::connect() {
     if (!validConfig()) {
+        emitEvent({.type = EventType::ConnectFailed, .reason = DisconnectReason::TcpConnectFailed});
         return false;
     }
 
@@ -186,7 +187,10 @@ bool MqttClient::connect() {
     m_mqttConnected = false;
     m_tcp.stop();
 
+    emitEvent({.type = EventType::ConnectAttempt});
+
     if (!m_tcp.connect(m_config.host, m_config.port)) {
+        emitEvent({.type = EventType::ConnectFailed, .reason = DisconnectReason::TcpConnectFailed});
         return false;
     }
 
@@ -195,12 +199,14 @@ bool MqttClient::connect() {
     if (!sendConnect() || !waitForConnAck(2000)) {
         m_tcp.stop();
         m_mqttConnected = false;
+        emitEvent({.type = EventType::ConnectFailed, .reason = DisconnectReason::ConnAckRejected});
         return false;
     }
 
     m_mqttConnected = true;
     m_lastRxMs = millis();
     m_lastTxMs = m_lastRxMs;
+    emitEvent({.type = EventType::Connected});
     return true;
 }
 
@@ -214,7 +220,7 @@ void MqttClient::update() {
         m_packet.clear();
 
         if (!readPacket(m_packet)) {
-            stop();
+            stopWithReason(DisconnectReason::PacketReadFailed);
             return;
         }
 
@@ -225,7 +231,7 @@ void MqttClient::update() {
     const uint32_t nowMs = millis();
 
     if (isKeepAliveTimedOut(nowMs)) {
-        stop();
+        stopWithReason(DisconnectReason::KeepAliveTimeout);
         return;
     }
 
@@ -254,9 +260,9 @@ bool MqttClient::publish(const char* topic, const uint8_t* payload, size_t paylo
 
     const size_t topicLen = strlen(topic);
     const uint32_t remainingLength = 2 + topicLen + payloadLen;
-    const uint16_t packetLimit = m_config.maxPacketSize < PRTN_MQTT_PACKET_BUFFER_SIZE
+    const uint16_t packetLimit = m_config.maxPacketSize < AppConfig::Mqtt::ClientPacketBufferSize
                                      ? m_config.maxPacketSize
-                                     : PRTN_MQTT_PACKET_BUFFER_SIZE;
+                                     : AppConfig::Mqtt::ClientPacketBufferSize;
 
     if (remainingLength > packetLimit) {
         return false;
@@ -282,6 +288,7 @@ bool MqttClient::publish(const char* topic, const uint8_t* payload, size_t paylo
     }
 
     m_lastTxMs = millis();
+    emitEvent({.type = EventType::PublishSent, .topic = topic, .payloadLen = payloadLen});
     return true;
 }
 
@@ -327,6 +334,7 @@ bool MqttClient::subscribe(const char* topic, uint8_t qos) {
     }
 
     m_lastTxMs = millis();
+    emitEvent({.type = EventType::SubscribeSent, .topic = topic, .packetId = packetId});
     return true;
 }
 
@@ -341,17 +349,21 @@ bool MqttClient::disconnect() {
         m_tcp.write(packet, sizeof(packet));
     }
 
-    return stop();
+    stopWithReason(DisconnectReason::ClientRequested);
+    return true;
 }
 
 bool MqttClient::stop() {
-    m_tcp.stop();
-    m_mqttConnected = false;
+    stopWithReason(DisconnectReason::LocalStop);
     return true;
 }
 
 void MqttClient::setMessageHandler(MessageHandler handler) {
     m_handler = handler;
+}
+
+void MqttClient::setEventHandler(EventHandler handler) {
+    m_eventHandler = handler;
 }
 
 bool MqttClient::validConfig() const {
@@ -436,6 +448,7 @@ bool MqttClient::sendPingReq() {
     }
 
     m_lastTxMs = millis();
+    emitEvent({.type = EventType::PingReqSent});
     return true;
 }
 
@@ -478,9 +491,9 @@ bool MqttClient::readPacket(MqttPacket& packet, uint32_t timeoutMs) {
         return false;
     }
 
-    const uint16_t packetLimit = m_config.maxPacketSize < PRTN_MQTT_PACKET_BUFFER_SIZE
+    const uint16_t packetLimit = m_config.maxPacketSize < AppConfig::Mqtt::ClientPacketBufferSize
                                      ? m_config.maxPacketSize
-                                     : PRTN_MQTT_PACKET_BUFFER_SIZE;
+                                     : AppConfig::Mqtt::ClientPacketBufferSize;
 
     if (packet.header.remainingLength > packetLimit) {
         return false;
@@ -567,6 +580,10 @@ void MqttClient::handlePacket(const MqttPacket& packet) {
                 sendPubAck(packet.publish.packetId);
             }
 
+            emitEvent({.type = EventType::PublishReceived,
+                       .topic = packet.publish.topic,
+                       .payloadLen = packet.publish.payloadLen});
+
             if (m_handler) {
                 m_handler(packet.publish.topic, packet.publish.payload, packet.publish.payloadLen);
             }
@@ -577,16 +594,23 @@ void MqttClient::handlePacket(const MqttPacket& packet) {
             break;
 
         case MqttPacket::Type::PINGRESP:
+            emitEvent({.type = EventType::PingRespReceived});
+            break;
+
         case MqttPacket::Type::SUBACK:
+            emitEvent({.type = EventType::SubAckReceived, .packetId = packet.subAck.packetId});
+            break;
+
         case MqttPacket::Type::PUBACK:
+            emitEvent({.type = EventType::PubAckReceived, .packetId = packet.pubAck.packetId});
             break;
 
         case MqttPacket::Type::DISCONNECT:
-            stop();
+            stopWithReason(DisconnectReason::BrokerRequested);
             break;
 
         default:
-            stop();
+            stopWithReason(DisconnectReason::PacketReadFailed);
             break;
     }
 }
@@ -597,4 +621,26 @@ bool MqttClient::isKeepAliveTimedOut(uint32_t nowMs) const {
     }
 
     return nowMs - m_lastRxMs > static_cast<uint32_t>(m_config.keepAliveSec) * 1500UL;
+}
+
+void MqttClient::stopWithReason(DisconnectReason reason) {
+    const bool wasConnected = m_mqttConnected || m_tcp.connected();
+    m_tcp.stop();
+    m_mqttConnected = false;
+
+    if (wasConnected) {
+        emitEvent({.type = EventType::Disconnected, .reason = reason});
+    }
+}
+
+void MqttClient::emitEvent(Event event) {
+    if (!m_eventHandler) {
+        return;
+    }
+
+    event.host = m_config.host != nullptr ? m_config.host : "";
+    event.port = m_config.port;
+    event.clientId = m_config.clientId != nullptr ? m_config.clientId : "";
+
+    m_eventHandler(event);
 }

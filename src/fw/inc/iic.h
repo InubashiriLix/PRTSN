@@ -1,7 +1,5 @@
 #pragma once
 
-#include "../../cfg/BoardConfig.h"
-
 #include <Arduino.h>
 #include <cstddef>
 #include <cstdint>
@@ -11,6 +9,11 @@ class TwoWire;
 class IIC
 {
 public:
+    static constexpr uint8_t DefaultSclPin = 5;
+    static constexpr uint8_t DefaultSdaPin = 4;
+    static constexpr uint32_t DefaultFrequency = 400000;
+    static constexpr uint16_t DefaultTimeoutMs = 50;
+
     enum class Error : uint8_t
     {
         OK = 0,
@@ -27,18 +30,18 @@ public:
 
     struct Config
     {
-        uint8_t  sdaPin    = PRTN_IIC_SDA_PIN;
-        uint8_t  sclPin    = PRTN_IIC_SCL_PIN;
-        uint32_t frequency = PRTN_IIC_FREQUENCY;
-        uint16_t timeoutMs = PRTN_IIC_TIMEOUT_MS;
+        uint8_t  sdaPin    = DefaultSdaPin;
+        uint8_t  sclPin    = DefaultSclPin;
+        uint32_t frequency = DefaultFrequency;
+        uint16_t timeoutMs = DefaultTimeoutMs;
     };
 
     struct Status
     {
         bool     started     = false;
-        uint8_t  sdaPin      = PRTN_IIC_SDA_PIN;
-        uint8_t  sclPin      = PRTN_IIC_SCL_PIN;
-        uint32_t frequency   = PRTN_IIC_FREQUENCY;
+        uint8_t  sdaPin      = DefaultSdaPin;
+        uint8_t  sclPin      = DefaultSclPin;
+        uint32_t frequency   = DefaultFrequency;
         Error    lastError   = Error::OK;
         uint8_t  lastAddress = 0;
         size_t   lastBytes   = 0;
@@ -47,7 +50,7 @@ public:
 public:
     IIC();
     explicit IIC(const Config& config);
-    IIC(uint8_t sdaPin, uint8_t sclPin, uint32_t frequency = PRTN_IIC_FREQUENCY);
+    IIC(uint8_t sdaPin, uint8_t sclPin, uint32_t frequency = DefaultFrequency);
 
     bool begin();
     void end();

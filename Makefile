@@ -10,6 +10,9 @@ ifneq ($(BUILD_FLAGS),)
 BUILD_PROPERTIES := --build-property compiler.c.extra_flags="$(BUILD_FLAGS)" --build-property compiler.cpp.extra_flags="$(BUILD_FLAGS)"
 endif
 
+SERIAL_TUI_DIR := tools/serial-tui
+SERIAL_TUI_BIN := $(SERIAL_TUI_DIR)/target/release/serial-tui
+
 RESET  := \033[0m
 BOLD   := \033[1m
 DIM    := \033[2m
@@ -18,7 +21,7 @@ GREEN  := \033[32m
 YELLOW := \033[33m
 CYAN   := \033[36m
 
-.PHONY: help info board-options check compdb build upload monitor list-ports clean clean-log
+.PHONY: help info board-options check compdb build upload monitor monitor-arduino serial-tui tools list-ports clean clean-log
 
 define section
 	@printf "\n$(BOLD)$(CYAN)==> %s$(RESET)\n" "$(1)"
@@ -55,7 +58,13 @@ help:
 	@printf "  $(CYAN)make upload$(RESET)       Upload firmware to $(BOLD)$(PORT)$(RESET)\n"
 	@printf "                    上传固件到 $(BOLD)$(PORT)$(RESET)\n"
 	@printf "  $(CYAN)make monitor$(RESET)      Open serial monitor at $(BOLD)$(BAUD)$(RESET)\n"
-	@printf "                    打开串口监视器，波特率 $(BOLD)$(BAUD)$(RESET)\n"
+	@printf "                    使用 Rust TUI 打开串口监视器，波特率 $(BOLD)$(BAUD)$(RESET)\n"
+	@printf "  $(CYAN)make monitor-arduino$(RESET) Open Arduino CLI serial monitor\n"
+	@printf "                    使用 arduino-cli 原生串口监视器\n"
+	@printf "  $(CYAN)make serial-tui$(RESET)   Build Rust serial TUI tool\n"
+	@printf "                    构建 Rust 串口 TUI 工具\n"
+	@printf "  $(CYAN)make tools$(RESET)        Build local development tools\n"
+	@printf "                    构建本地开发工具\n"
 	@printf "  $(CYAN)make list-ports$(RESET)   List connected boards and ports\n"
 	@printf "                    列出已连接的板子和串口\n"
 	@printf "  $(CYAN)make info$(RESET)         Show current project configuration\n"
@@ -176,6 +185,14 @@ build:
 	@arduino-cli compile --fqbn $(FQBN) $(BUILD_PROPERTIES) --build-path $(BUILD_DIR) $(SKETCH)
 	$(call ok,build finished / 编译完成)
 
+serial-tui:
+	$(call section,Building serial TUI / 构建串口 TUI)
+	$(call cmd,cargo build --release --manifest-path $(SERIAL_TUI_DIR)/Cargo.toml)
+	@cargo build --release --manifest-path $(SERIAL_TUI_DIR)/Cargo.toml
+	$(call ok,serial TUI ready / 串口 TUI 已就绪)
+
+tools: serial-tui
+
 upload:
 	$(call section,Uploading firmware / 上传固件)
 	@if [ ! -e "$(PORT)" ]; then \
@@ -186,8 +203,21 @@ upload:
 	@arduino-cli upload -p $(PORT) --fqbn $(FQBN) --input-dir $(BUILD_DIR)
 	$(call ok,upload finished / 上传完成)
 
-monitor:
+monitor: serial-tui
 	$(call section,Opening serial monitor / 打开串口监视器)
+	@if [ ! -e "$(PORT)" ]; then \
+		printf "$(YELLOW)!$(RESET) serial port not found / 未找到串口: $(PORT)\n"; \
+		printf "Use / 使用: make list-ports\n"; \
+	fi
+	$(call cmd,$(SERIAL_TUI_BIN) --port $(PORT) --baud $(BAUD))
+	@$(SERIAL_TUI_BIN) --port $(PORT) --baud $(BAUD)
+
+monitor-arduino:
+	$(call section,Opening Arduino CLI serial monitor / 打开 Arduino CLI 串口监视器)
+	@if [ ! -e "$(PORT)" ]; then \
+		printf "$(YELLOW)!$(RESET) serial port not found / 未找到串口: $(PORT)\n"; \
+		printf "Use / 使用: make list-ports\n"; \
+	fi
 	$(call cmd,arduino-cli monitor -p $(PORT) -c baudrate=$(BAUD))
 	@arduino-cli monitor -p $(PORT) -c baudrate=$(BAUD)
 

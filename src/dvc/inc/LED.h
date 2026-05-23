@@ -6,6 +6,9 @@
 class LED
 {
 public:
+    static constexpr uint8_t DefaultMainPin = 12;
+    static constexpr uint8_t DefaultAuxPin  = 13;
+
     enum class State : uint8_t
     {
         DIGITAL_HIGH = HIGH,

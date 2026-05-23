@@ -42,7 +42,7 @@ ESP32-C3
     负责 MQTT packet 的语义表达
     包含 header、body、类型、解析辅助结构
 
-  NodeController
+  PrtnApp / focused controller
     周期调用 Wifi 和 MqttServer
     处理业务 topic，例如 LED 控制
 ```
@@ -349,7 +349,7 @@ MqttServer 负责接收 WiFiClient。
 ClientConnection 负责持有 WiFiClient。
 ```
 
-不要让 `NodeController` 持有 `WiFiClient`。
+不要让 app/controller 持有 `WiFiClient`。
 
 不要在业务层分配 `ClientConnection`。
 
@@ -830,12 +830,20 @@ void MqttServer::handlePacket(uint8_t clientIndex, const MqttPacket& packet) {
 连接生命周期集中在 ClientConnection。
 ```
 
-## 19. 与 NodeController 集成
+## 19. 与 App / Controller 集成
 
-`NodeController` 应该持有 `MqttServer&`：
+当前工程里不再保留一个巨大的总控类。推荐做法是：
+
+```text
+PrtnApp 持有静态对象和 task。
+具体业务 controller 只持有自己真正需要的 service/device 引用。
+MqttServer 仍然由 service 层自己维护连接池。
+```
+
+如果需要 MQTT 业务控制器，它应该持有 `Wifi&` 和 `MqttServer&`：
 
 ```cpp
-class NodeController
+class MqttController
 {
 private:
     Wifi& m_wifi;
@@ -846,7 +854,7 @@ private:
 setup：
 
 ```cpp
-bool NodeController::setup() {
+bool MqttController::setup() {
     if (!m_wifi.begin()) {
         return false;
     }
@@ -867,19 +875,11 @@ bool NodeController::setup() {
 loop：
 
 ```cpp
-void NodeController::ControlLoop() {
-    TickType_t taskLastWakeTime = xTaskGetTickCount();
+void MqttController::update() {
+    m_wifi.updateByIntervalMs(400);
 
-    for (;;) {
-        m_wifi.updateByIntervalMs(400);
-
-        if (m_wifi.apRunning() || m_wifi.staConnected()) {
-            m_mqttServer.update();
-        }
-
-        m_ledAux.updateByIntervalMs(1000);
-
-        vTaskDelayUntil(&taskLastWakeTime, m_period);
+    if (m_wifi.apRunning() || m_wifi.staConnected()) {
+        m_mqttServer.update();
     }
 }
 ```
@@ -898,7 +898,7 @@ void NodeController::ControlLoop() {
 7. Subscription 表。
 8. PUBLISH parser。
 9. PUBLISH encoder + topic 转发。
-10. MessageHandler 回调到 NodeController。
+10. MessageHandler 回调到具体业务 controller。
 ```
 
 每一步都可以单独测。
