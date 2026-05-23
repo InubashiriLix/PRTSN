@@ -54,8 +54,8 @@ bool IIC::write(uint8_t address, const uint8_t* data, size_t length) {
     }
 
     m_wire->beginTransmission(address);
-    const size_t written = length > 0 ? m_wire->write(data, length) : 0;
-    const uint8_t result = m_wire->endTransmission();
+    const size_t  written = length > 0 ? m_wire->write(data, length) : 0;
+    const uint8_t result  = m_wire->endTransmission();
 
     return finishTransmission(address, written, result);
 }
