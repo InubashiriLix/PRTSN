@@ -5,13 +5,21 @@ BASE_FQBN := $(BOARD_PACKAGE):$(BOARD_ARCH):$(BOARD_ID)
 FQBN_OPTIONS := UploadSpeed=$(UPLOAD_SPEED),CDCOnBoot=$(CDC_ON_BOOT),CPUFreq=$(CPU_FREQ),FlashFreq=$(FLASH_FREQ),PartitionScheme=$(PARTITION_SCHEME),DebugLevel=$(DEBUG_LEVEL),EraseFlash=$(ERASE_FLASH)
 FQBN := $(BASE_FQBN):$(FQBN_OPTIONS)
 
-BUILD_FLAGS := $(strip $(BUILD_DEFINES) $(BUILD_OPT_FLAGS))
-ifneq ($(BUILD_FLAGS),)
-BUILD_PROPERTIES := --build-property compiler.c.extra_flags="$(BUILD_FLAGS)" --build-property compiler.cpp.extra_flags="$(BUILD_FLAGS)"
-endif
+BUILD_FLAGS = $(strip $(BUILD_DEFINES) $(BUILD_OPT_FLAGS))
+BUILD_PROPERTIES = $(if $(BUILD_FLAGS),--build-property compiler.c.extra_flags="$(BUILD_FLAGS)" --build-property compiler.cpp.extra_flags="$(BUILD_FLAGS)")
 
 SERIAL_TUI_DIR := tools/serial-tui
 SERIAL_TUI_BIN := $(SERIAL_TUI_DIR)/target/release/serial-tui
+
+ESP32_TOOLS := $(HOME)/.arduino15/packages/esp32/tools
+OPENOCD_ROOT := $(lastword $(sort $(wildcard $(ESP32_TOOLS)/openocd-esp32/*)))
+OPENOCD_BIN := $(OPENOCD_ROOT)/bin/openocd
+OPENOCD_SCRIPTS := $(OPENOCD_ROOT)/share/openocd/scripts
+OPENOCD_BOARD_CFG ?= board/esp32c3-builtin.cfg
+GDB_ROOT := $(lastword $(sort $(wildcard $(ESP32_TOOLS)/riscv32-esp-elf-gdb/*)))
+GDB_BIN := $(GDB_ROOT)/bin/riscv32-esp-elf-gdb
+DEBUG_ELF := $(BUILD_DIR)/PRTN.ino.elf
+DEBUG_GDB_PORT ?= 3333
 
 RESET  := \033[0m
 BOLD   := \033[1m
@@ -21,7 +29,7 @@ GREEN  := \033[32m
 YELLOW := \033[33m
 CYAN   := \033[36m
 
-.PHONY: help info board-options check compdb build upload monitor monitor-arduino serial-tui tools list-ports clean clean-log
+.PHONY: help info board-options check compdb build debug-build debug-server debug-gdb upload monitor monitor-arduino serial-tui tools list-ports clean clean-log
 
 define section
 	@printf "\n$(BOLD)$(CYAN)==> %s$(RESET)\n" "$(1)"
@@ -40,7 +48,7 @@ define fail
 endef
 
 define cmd
-	@printf "$(DIM)$ %s$(RESET)\n" "$(1)"
+	@printf '$(DIM)$ %s$(RESET)\n' '$(1)'
 endef
 
 help:
@@ -55,6 +63,12 @@ help:
 	@printf "                    为 clangd 生成 compile_commands.json\n"
 	@printf "  $(CYAN)make build$(RESET)        Compile firmware\n"
 	@printf "                    编译固件\n"
+	@printf "  $(CYAN)make debug-build$(RESET)  Compile firmware with debug-friendly flags\n"
+	@printf "                    使用适合单步调试的参数编译固件\n"
+	@printf "  $(CYAN)make debug-server$(RESET) Start ESP32-C3 USB JTAG OpenOCD server\n"
+	@printf "                    启动 ESP32-C3 USB JTAG OpenOCD 调试服务器\n"
+	@printf "  $(CYAN)make debug-gdb$(RESET)    Connect terminal GDB to OpenOCD\n"
+	@printf "                    使用终端 GDB 连接 OpenOCD\n"
 	@printf "  $(CYAN)make upload$(RESET)       Upload firmware to $(BOLD)$(PORT)$(RESET)\n"
 	@printf "                    上传固件到 $(BOLD)$(PORT)$(RESET)\n"
 	@printf "  $(CYAN)make monitor$(RESET)      Open serial monitor at $(BOLD)$(BAUD)$(RESET)\n"
@@ -112,6 +126,9 @@ info:
 	@printf "Baud   / 波特率    : $(BAUD)\n"
 	@printf "Sketch             : $(SKETCH)\n"
 	@printf "Build dir / 构建目录: $(BUILD_DIR)\n"
+	@printf "Debug ELF          : $(DEBUG_ELF)\n"
+	@printf "OpenOCD            : $(OPENOCD_BIN)\n"
+	@printf "GDB                : $(GDB_BIN)\n"
 
 board-options:
 	$(call section,Board options / 板卡配置项)
@@ -184,6 +201,34 @@ build:
 	$(call cmd,arduino-cli compile --fqbn $(FQBN) $(BUILD_PROPERTIES) --build-path $(BUILD_DIR) $(SKETCH))
 	@arduino-cli compile --fqbn $(FQBN) $(BUILD_PROPERTIES) --build-path $(BUILD_DIR) $(SKETCH)
 	$(call ok,build finished / 编译完成)
+
+debug-build: BUILD_OPT_FLAGS := -Og -g3
+debug-build: build
+
+debug-server:
+	$(call section,Starting ESP32-C3 OpenOCD server / 启动 ESP32-C3 OpenOCD 调试服务器)
+	@if [ ! -x "$(OPENOCD_BIN)" ]; then \
+		printf "$(RED)✗ OpenOCD not found / 未找到 OpenOCD: $(OPENOCD_BIN)$(RESET)\n"; \
+		printf "Run / 运行:\n  arduino-cli core install esp32:esp32\n"; \
+		exit 1; \
+	fi
+	$(call cmd,$(OPENOCD_BIN) -s $(OPENOCD_SCRIPTS) -f $(OPENOCD_BOARD_CFG))
+	@$(OPENOCD_BIN) -s $(OPENOCD_SCRIPTS) -f $(OPENOCD_BOARD_CFG)
+
+debug-gdb:
+	$(call section,Connecting GDB to OpenOCD / 使用 GDB 连接 OpenOCD)
+	@if [ ! -x "$(GDB_BIN)" ]; then \
+		printf "$(RED)✗ riscv32-esp-elf-gdb not found / 未找到 riscv32-esp-elf-gdb: $(GDB_BIN)$(RESET)\n"; \
+		printf "Run / 运行:\n  arduino-cli core install esp32:esp32\n"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(DEBUG_ELF)" ]; then \
+		printf "$(RED)✗ Debug ELF not found / 未找到调试 ELF: $(DEBUG_ELF)$(RESET)\n"; \
+		printf "Run / 运行:\n  make debug-build\n"; \
+		exit 1; \
+	fi
+	$(call cmd,$(GDB_BIN) -q $(DEBUG_ELF) -ex "target remote localhost:$(DEBUG_GDB_PORT)" -ex "monitor reset halt")
+	@$(GDB_BIN) -q $(DEBUG_ELF) -ex "target remote localhost:$(DEBUG_GDB_PORT)" -ex "monitor reset halt"
 
 serial-tui:
 	$(call section,Building serial TUI / 构建串口 TUI)
