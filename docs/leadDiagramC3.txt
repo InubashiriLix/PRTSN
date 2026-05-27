@@ -1,0 +1,19 @@
+                 ESP32-C3 Super Mini Pinout
+        ┌─────────────────────────────────────────┐
+ 01 GND │                                         │ GND      17
+ 02 GPIO00 / ADC0 / UART1_TX                      │ 3.3V     18
+ 03 GPIO01 / ADC1 / UART1_RX                      │ GPIO02 / SPI_CLK  / PWM02   19
+ 04 GPIO12                                        │ GPIO03 / SPI_MOSI           20
+ 05 GPIO18                                        │ GPIO10 / SPI_MISO / PWM03   21
+ 06 GPIO19                                        │ GPIO06 / PWM01              22
+ 07 GND                                           │ GPIO07 / SPI_CS             23
+ 08 UART0_TX                                      │ GPIO11                      24
+ 09 UART0_RX                                      │ GND                         25
+ 10 GPIO13                                        │ 3.3V                        26
+ 11 NC                                            │ GPIO05 / I2C_SCL            27
+ 12 RST                                           │ GPIO04 / I2C_SDA / ADC4     28
+ 13 3.3V                                          │ GPIO08 / PWM04              29
+ 14 GND                                           │ GPIO09 / BOOT               30
+ 15 PWB                                           │ 5V                          31
+ 16 5V                                            │ GND                         32
+        └─────────────────────────────────────────┘
