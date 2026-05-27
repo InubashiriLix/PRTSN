@@ -7,6 +7,7 @@
 #include "src/dvc/inc/Button.h"
 #include "src/dvc/inc/Serial.h"
 #include "src/svc/inc/SerialConsoleService.h"
+#include "src/fw/inc/pwm.h"
 
 #include <Arduino.h>
 #include "freertos/FreeRTOS.h"
@@ -16,7 +17,7 @@
 #undef Serial
 #endif
 
-namespace EmptyTemplateApp
+namespace PwmTestApp
 {
     namespace Detail
     {
@@ -39,6 +40,16 @@ namespace EmptyTemplateApp
             dvc::Serial          serial {AppConfig::Hardware::SerialBaudrate};
             SerialConsoleService console {serial};
 
+            Pwm::Config pwmConfig {
+                .pin            = 8,
+                .frequencyHz    = 1000,
+                .resolutionBits = 8,
+                .channel        = 0,
+                .initialDuty    = 255,
+                .invert         = false};
+
+            Pwm pwm {pwmConfig};
+
             Button button1 {9, LOW, INPUT_PULLUP, 50};
 
             TaskHandle_t taskHandle = nullptr;
@@ -55,6 +66,20 @@ namespace EmptyTemplateApp
             for (;;) {
                 app.console.updateCommandResponse();
                 app.button1.update();
+                static int cnt  = 0;
+                static int duty = 0;
+                app.pwm.setDutyRaw(duty);
+                cnt += 3;
+                if (cnt > 510) {
+                    duty = cnt = 0;
+                }
+                if (cnt > 255) {
+                    duty = 510 - cnt;
+                }
+                else {
+                    duty = cnt;
+                }
+
                 vTaskDelayUntil(&taskLastWakeTime, TaskPeriodTicks);
             }
         }
@@ -91,14 +116,19 @@ namespace EmptyTemplateApp
         app.console.printBootBanner(app.nodeInfo);
         if (!app.button1.setup())
             app.console.error("Failed to setup Button1");
-        app.button1.setCallback([](Button::Event event, Button::State, void* context) -> void {
-            if (event != Button::Event::PRESSED && context != nullptr) {
-                return;
-            }
-            auto* app = static_cast<Detail::Context*>(context);
-            app->console.log("Button1 pressed");
-        },
-                                &app);
+        app.button1.setCallback(
+            [](Button::Event event, Button::State, void* context) -> void {
+                if (event != Button::Event::PRESSED && context != nullptr) {
+                    return;
+                }
+                auto* app = static_cast<Detail::Context*>(context);
+                app->console.log("Button1 pressed");
+            },
+            &app);
+
+        if (!app.pwm.setup()) {
+            app.console.error("Failed to setup PWM");
+        }
 
         // Put complete app-level experiment setup here.
 
