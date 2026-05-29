@@ -11,7 +11,7 @@ class INMP441 : public IIS
 {
 
 public:
-    static constexpr uint32_t DEFAULT_SAMPLE_RATE = 16000;
+    static constexpr uint32_t DEFAULT_SAMPLE_RATE       = 16000;
     static constexpr int      DEFAULT_EVENT_QUEUE_DEPTH = 8;
 
     struct Stats

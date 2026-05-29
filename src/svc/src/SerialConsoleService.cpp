@@ -50,10 +50,10 @@ bool SerialConsoleService::registerCommand(const char* name, Handler handler, co
     });
 }
 
-bool SerialConsoleService::registerCommand(const char* name,
+bool SerialConsoleService::registerCommand(const char*    name,
                                            ContextHandler handler,
-                                           void* context,
-                                           const char* description) {
+                                           void*          context,
+                                           const char*    description) {
     return registerCommand(Command {
         .name           = name,
         .contextHandler = handler,

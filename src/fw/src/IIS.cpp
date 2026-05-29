@@ -13,7 +13,7 @@ IIS::Err IIS::setup() {
         return Err::INVALID_STATE;
     }
 
-    const int queueDepth = m_config.eventQueueDepth > 0 ? m_config.eventQueueDepth : 0;
+    const int      queueDepth  = m_config.eventQueueDepth > 0 ? m_config.eventQueueDepth : 0;
     QueueHandle_t* queueHandle = queueDepth > 0 ? &m_eventQueue : nullptr;
 
     auto err = toErr(

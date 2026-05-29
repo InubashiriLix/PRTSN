@@ -21,6 +21,8 @@ GDB_BIN := $(GDB_ROOT)/bin/riscv32-esp-elf-gdb
 DEBUG_ELF := $(BUILD_DIR)/PRTN.ino.elf
 DEBUG_GDB_PORT ?= 3333
 
+FORMAT_FILES := $(shell git ls-files '*.h' '*.hpp' '*.c' '*.cpp' '*.cc' '*.cxx' '*.ino')
+
 RESET  := \033[0m
 BOLD   := \033[1m
 DIM    := \033[2m
@@ -29,7 +31,7 @@ GREEN  := \033[32m
 YELLOW := \033[33m
 CYAN   := \033[36m
 
-.PHONY: help info board-options check compdb build debug-build debug-server debug-gdb upload monitor monitor-arduino serial-tui tools list-ports clean clean-log
+.PHONY: help info board-options check compdb build debug-build debug-server debug-gdb upload monitor monitor-arduino serial-tui tools list-ports clean clean-log format format-check
 
 define section
 	@printf "\n$(BOLD)$(CYAN)==> %s$(RESET)\n" "$(1)"
@@ -89,6 +91,11 @@ help:
 	@printf "                    删除本地构建输出\n"
 	@printf "  $(CYAN)make clean-log$(RESET)    Remove Neovim LSP log\n"
 	@printf "                    删除 Neovim LSP 日志\n\n"
+	@printf "  $(BOLD)make format$(RESET)       Format source files with clang-format\n"
+	@printf "                    使用 clang-format 格式化源代码\n"
+	@printf "  $(BOLD)make format-check$(RESET) Check source files format with clang-format\n"
+	@printf "                    使用clang-format检查源码格式\n"
+
 
 	@printf "$(BOLD)Config / 当前配置$(RESET)\n"
 	@printf "  FQBN      = $(FQBN)\n"
@@ -150,6 +157,13 @@ check:
 		exit 0; \
 	}
 	$(call ok,clangd found / 已找到 clangd)
+
+	@command -v clang-format >/dev/null || { \
+		printf "$(YELLOW)! clang-format not found / 未找到 clang-format，make format 可能不可用, 同时如果启动了pre-commit 和 pre-push, 可能失败$(RESET)\n"; \
+		printf "Install / 安装:\n  sudo pacman -S clang-format\n"; \
+		exit 0; \
+	}
+	$(call ok,clang-format found / 已找到 clang-format)
 
 	@command -v arduino-language-server >/dev/null || { \
 		printf "$(YELLOW)! arduino-language-server not found / 未找到 arduino-language-server$(RESET)\n"; \
@@ -281,3 +295,16 @@ clean-log:
 	$(call cmd,rm -f ~/.local/state/nvim/lsp.log)
 	@rm -f ~/.local/state/nvim/lsp.log
 	$(call ok,lsp.log removed / lsp.log 已删除)
+
+format:
+	$(call section,Formatting source files / 格式化源代码)
+	$(call cmd,clang-format -i $(FORMAT_FILES))
+	@clang-format -i $(FORMAT_FILES)
+	$(call ok,formatting finished / 格式化完成)
+
+format-check:
+	$(call section,Checking source file formatting / 检查源代码格式)
+	$(call cmd,clang-format --dry-run --Werror $(FORMAT_FILES))
+	@clang-format --dry-run --Werror $(FORMAT_FILES)
+	$(call ok,formatting correct / 格式正确)
+
