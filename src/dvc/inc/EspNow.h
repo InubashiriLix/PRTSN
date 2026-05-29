@@ -10,10 +10,10 @@ class EspNow
 public:
     struct Peer
     {
-        uint8_t  mac[ESP_NOW_ETH_ALEN] {};
-        uint8_t  channel = 0;
-        bool     encrypted = false;
-        uint8_t  lmk[ESP_NOW_KEY_LEN] {};
+        uint8_t mac[ESP_NOW_ETH_ALEN] {};
+        uint8_t channel   = 0;
+        bool    encrypted = false;
+        uint8_t lmk[ESP_NOW_KEY_LEN] {};
     };
 
     enum Mode : uint8_t
@@ -26,10 +26,10 @@ public:
 
     struct Config
     {
-        Peer*   peers = nullptr;
+        Peer*   peers     = nullptr;
         uint8_t peerCount = 0;
-        uint8_t maxPeers = 0;
-        Mode    mode = NONE;
+        uint8_t maxPeers  = 0;
+        Mode    mode      = NONE;
     };
 
     enum RtnErrCode : uint8_t
