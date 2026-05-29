@@ -45,16 +45,16 @@ INMP441::Config INMP441::makeConfig(
     };
 
     Config config = {
-        .port         = port,
-        .driverConfig = driverConfig,
-        .pinConfig    = pinConfig,
+        .port            = port,
+        .driverConfig    = driverConfig,
+        .pinConfig       = pinConfig,
         .eventQueueDepth = DEFAULT_EVENT_QUEUE_DEPTH};
 
     return config;
 }
 
 INMP441::Err INMP441::setup() {
-    const auto err = IIS::setup();
+    const auto err       = IIS::setup();
     m_stats.lastSetupErr = err;
 
     if (err == Err::OK) {

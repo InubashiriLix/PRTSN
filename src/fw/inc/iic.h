@@ -9,8 +9,8 @@ class TwoWire;
 class IIC
 {
 public:
-    static constexpr uint8_t DefaultSclPin = 5;
-    static constexpr uint8_t DefaultSdaPin = 4;
+    static constexpr uint8_t  DefaultSclPin    = 5;
+    static constexpr uint8_t  DefaultSdaPin    = 4;
     static constexpr uint32_t DefaultFrequency = 400000;
     static constexpr uint16_t DefaultTimeoutMs = 50;
 

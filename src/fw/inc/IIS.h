@@ -14,9 +14,9 @@ class IIS
 public:
     struct Config
     {
-        i2s_port_t          port         = I2S_NUM_0;
-        i2s_driver_config_t driverConfig = {};
-        i2s_pin_config_t    pinConfig    = {};
+        i2s_port_t          port            = I2S_NUM_0;
+        i2s_driver_config_t driverConfig    = {};
+        i2s_pin_config_t    pinConfig       = {};
         int                 eventQueueDepth = 0;
     };
 

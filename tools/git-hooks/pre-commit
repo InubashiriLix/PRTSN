@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+
+make format
+
+git diff --quiet || {
+    echo "clang-format changed files, Please review and git add them, then commit again."
+    exit 1
+}
