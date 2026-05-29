@@ -14,9 +14,7 @@ namespace
     };
 
     bool sameMac(const uint8_t* lhs, const uint8_t* rhs) {
-        return lhs != nullptr
-            && rhs != nullptr
-            && std::memcmp(lhs, rhs, ESP_NOW_ETH_ALEN) == 0;
+        return lhs != nullptr && rhs != nullptr && std::memcmp(lhs, rhs, ESP_NOW_ETH_ALEN) == 0;
     }
 
     bool isZeroMac(const uint8_t* mac) {
@@ -249,8 +247,8 @@ EspNow::RtnErrCode EspNow::setOnRecvCallback(esp_now_recv_cb_t callback) {
     }
 
     const esp_err_t err = callback == nullptr
-        ? esp_now_unregister_recv_cb()
-        : esp_now_register_recv_cb(callback);
+                              ? esp_now_unregister_recv_cb()
+                              : esp_now_register_recv_cb(callback);
 
     if (err != ESP_OK) {
         return RtnErrCode::CALLBACK_FAILED;
@@ -266,8 +264,8 @@ EspNow::RtnErrCode EspNow::setOnSendCallback(esp_now_send_cb_t callback) {
     }
 
     const esp_err_t err = callback == nullptr
-        ? esp_now_unregister_send_cb()
-        : esp_now_register_send_cb(callback);
+                              ? esp_now_unregister_send_cb()
+                              : esp_now_register_send_cb(callback);
 
     if (err != ESP_OK) {
         return RtnErrCode::CALLBACK_FAILED;

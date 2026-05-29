@@ -30,10 +30,10 @@ private:
     uint8_t  m_inputMode;
     uint32_t m_debounceMs;
 
-    State    m_state              = State::RELEASED;
-    uint8_t  m_lastRawLevel       = HIGH;
-    uint32_t m_lastRawChangeMs    = 0;
-    uint32_t m_lastStateChangeMs  = 0;
+    State    m_state             = State::RELEASED;
+    uint8_t  m_lastRawLevel      = HIGH;
+    uint32_t m_lastRawChangeMs   = 0;
+    uint32_t m_lastStateChangeMs = 0;
 
     Event  m_eventQueue[EVENT_QUEUE_CAPACITY] {};
     size_t m_eventHead  = 0;
@@ -48,15 +48,15 @@ private:
     volatile uint32_t m_lastInterruptMs  = 0;
 
 public:
-    Button(uint8_t pin,
-           uint8_t activeLevel = LOW,
-           uint8_t inputMode = INPUT_PULLUP,
-           uint32_t debounceMs = 30);
+    Button(uint8_t  pin,
+           uint8_t  activeLevel = LOW,
+           uint8_t  inputMode   = INPUT_PULLUP,
+           uint32_t debounceMs  = 30);
 
     bool setup();
-    bool setupInterrupt(Callback callback = nullptr,
-                        void* context = nullptr,
-                        int interruptMode = CHANGE);
+    bool setupInterrupt(Callback callback      = nullptr,
+                        void*    context       = nullptr,
+                        int      interruptMode = CHANGE);
     void detachInterruptMode();
 
     void update();

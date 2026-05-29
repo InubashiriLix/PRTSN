@@ -13,19 +13,23 @@ IIS::Err IIS::setup() {
         return Err::INVALID_STATE;
     }
 
-    // TODO: the queue might should be supported
+    const int queueDepth = m_config.eventQueueDepth > 0 ? m_config.eventQueueDepth : 0;
+    QueueHandle_t* queueHandle = queueDepth > 0 ? &m_eventQueue : nullptr;
+
     auto err = toErr(
         i2s_driver_install(
             m_config.port,
             &m_config.driverConfig,
-            0,
-            NULL));
+            queueDepth,
+            queueHandle));
     if (err != Err::OK) {
+        m_eventQueue = nullptr;
         return err;
     }
     err = toErr(i2s_set_pin(m_config.port, &m_config.pinConfig));
     if (err != Err::OK) {
         i2s_driver_uninstall(m_config.port);
+        m_eventQueue = nullptr;
         return err;
     }
 
@@ -36,7 +40,8 @@ IIS::Err IIS::setup() {
 void IIS::end() {
     if (m_started) {
         i2s_driver_uninstall(m_config.port);
-        m_started = false;
+        m_eventQueue = nullptr;
+        m_started    = false;
     }
 }
 
@@ -47,4 +52,12 @@ IIS::Err IIS::read(void* data, size_t size, size_t& bytesRead, TickType_t ticksT
     }
 
     return toErr(i2s_read(m_config.port, data, size, &bytesRead, ticksToWait));
+}
+
+bool IIS::pollEvent(i2s_event_t& event, TickType_t ticksToWait) {
+    if (!m_started || m_eventQueue == nullptr) {
+        return false;
+    }
+
+    return xQueueReceive(m_eventQueue, &event, ticksToWait) == pdTRUE;
 }

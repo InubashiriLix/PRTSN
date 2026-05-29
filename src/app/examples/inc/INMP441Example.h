@@ -26,15 +26,14 @@ namespace INMP441Example
         constexpr int WsPin     = 7;
         constexpr int DataInPin = 10;
 
-        constexpr uint32_t SampleRate = 16000;
-        constexpr i2s_channel_fmt_t Channel = I2S_CHANNEL_FMT_ONLY_LEFT; // INMP441 L/R tied to GND.
+        constexpr uint32_t          SampleRate = 16000;
+        constexpr i2s_channel_fmt_t Channel    = I2S_CHANNEL_FMT_ONLY_LEFT; // INMP441 L/R tied to GND.
 
-        constexpr size_t     SampleCount = 256;
-        constexpr TickType_t ReadTimeoutTicks = pdMS_TO_TICKS(100);
-        constexpr TickType_t TaskPeriodTicks  = pdMS_TO_TICKS(100);
-        constexpr uint32_t   LogIntervalMs    = 500;
-        constexpr uint32_t   TaskStackWords   = 1024 * 4;
-        constexpr UBaseType_t TaskPriority    = 4;
+        constexpr size_t      SampleCount      = 256;
+        constexpr TickType_t  ReadTimeoutTicks = pdMS_TO_TICKS(100);
+        constexpr uint32_t    LogIntervalMs    = 500;
+        constexpr uint32_t    TaskStackWords   = 1024 * 4;
+        constexpr UBaseType_t TaskPriority     = 4;
 
         struct Context
         {
@@ -85,8 +84,8 @@ namespace INMP441Example
             uint64_t absSum    = 0;
 
             for (size_t i = 0; i < samplesRead; ++i) {
-                const int32_t sample = sample24FromRaw32(app.samples[i]);
-                const uint32_t mag   = abs32(sample);
+                const int32_t  sample = sample24FromRaw32(app.samples[i]);
+                const uint32_t mag    = abs32(sample);
 
                 if (sample < minSample) {
                     minSample = sample;
@@ -101,37 +100,52 @@ namespace INMP441Example
             }
 
             const uint32_t meanAbs = static_cast<uint32_t>(absSum / samplesRead);
-            app.console.info("INMP441 samples=%u peak=%lu meanAbs=%lu min=%ld max=%ld",
+            const auto&    stats   = app.mic.stats();
+
+            app.console.info("INMP441 samples=%u peak=%lu meanAbs=%lu min=%ld max=%ld healthy=%u readOk=%lu readErr=%lu rxDone=%lu rxOvf=%lu dmaErr=%lu",
                              static_cast<unsigned>(samplesRead),
                              static_cast<unsigned long>(peak),
                              static_cast<unsigned long>(meanAbs),
                              static_cast<long>(minSample),
-                             static_cast<long>(maxSample));
+                             static_cast<long>(maxSample),
+                             static_cast<unsigned>(app.mic.healthy()),
+                             static_cast<unsigned long>(stats.readOk),
+                             static_cast<unsigned long>(stats.readError),
+                             static_cast<unsigned long>(stats.rxDone),
+                             static_cast<unsigned long>(stats.rxOverflow),
+                             static_cast<unsigned long>(stats.dmaError));
         }
 
         inline void taskEntry(void*) {
-            Context&   app = context();
-            TickType_t lastWakeTime = xTaskGetTickCount();
+            Context& app = context();
 
             for (;;) {
                 app.console.updateCommandResponse();
 
-                size_t samplesRead = 0;
-                const auto err = app.mic.readRaw(app.samples, SampleCount, samplesRead, ReadTimeoutTicks);
+                size_t     samplesRead = 0;
+                const auto err         = app.mic.readRaw(app.samples, SampleCount, samplesRead, ReadTimeoutTicks);
 
                 const uint32_t nowMs = millis();
                 if (nowMs - app.lastLogMs >= LogIntervalMs) {
                     app.lastLogMs = nowMs;
 
                     if (err != INMP441::Err::OK) {
-                        app.console.error("INMP441 read failed: %ld", static_cast<long>(err));
+                        const auto& stats = app.mic.stats();
+                        app.console.error("INMP441 read failed: %ld healthy=%u readOk=%lu readErr=%lu rxDone=%lu rxOvf=%lu dmaErr=%lu",
+                                          static_cast<long>(err),
+                                          static_cast<unsigned>(app.mic.healthy()),
+                                          static_cast<unsigned long>(stats.readOk),
+                                          static_cast<unsigned long>(stats.readError),
+                                          static_cast<unsigned long>(stats.rxDone),
+                                          static_cast<unsigned long>(stats.rxOverflow),
+                                          static_cast<unsigned long>(stats.dmaError));
                     }
                     else {
                         logStats(app, samplesRead);
                     }
                 }
 
-                vTaskDelayUntil(&lastWakeTime, TaskPeriodTicks);
+                taskYIELD();
             }
         }
 

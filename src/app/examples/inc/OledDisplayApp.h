@@ -52,13 +52,13 @@ namespace OledDisplayApp
         }
 
         if (!app.oled.displayText("1234567890123", SSD1306::TextStyle {
-                                                      0,
-                                                      0,
-                                                      2,
-                                                      SSD1306::Color::WHITE,
-                                                      SSD1306::Color::BLACK,
-                                                      false,
-                                                  }) ||
+                                                       0,
+                                                       0,
+                                                       2,
+                                                       SSD1306::Color::WHITE,
+                                                       SSD1306::Color::BLACK,
+                                                       false,
+                                                   }) ||
             !app.oled.displayText("PRTNS", SSD1306::TextStyle {
                                                0,
                                                16,

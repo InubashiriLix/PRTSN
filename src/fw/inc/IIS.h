@@ -2,7 +2,12 @@
 
 #include "driver/i2s_types.h"
 #include "driver/i2s_types_legacy.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 #include <driver/i2s.h>
+
+#include <cstddef>
+#include <cstdint>
 
 class IIS
 {
@@ -12,6 +17,7 @@ public:
         i2s_port_t          port         = I2S_NUM_0;
         i2s_driver_config_t driverConfig = {};
         i2s_pin_config_t    pinConfig    = {};
+        int                 eventQueueDepth = 0;
     };
 
     enum class Err : int32_t
@@ -51,7 +57,10 @@ protected:
         return m_config;
     }
 
+    bool pollEvent(i2s_event_t& event, TickType_t ticksToWait);
+
 private:
-    Config m_config;
-    bool   m_started = false;
+    Config        m_config;
+    bool          m_started    = false;
+    QueueHandle_t m_eventQueue = nullptr;
 };
