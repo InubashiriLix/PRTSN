@@ -1,5 +1,7 @@
 #pragma once
 
+#include "src/alg/inc/alg_attitude.h"
+#include "src/alg/inc/alg_filter.h"
 #include "src/alg/inc/vectors.h"
 #include "src/fw/inc/IIC.h"
 
@@ -25,6 +27,15 @@ public:
 
     static constexpr TickType_t RESET_DELAY_TICKS = pdMS_TO_TICKS(100);
     static constexpr TickType_t WAKE_DELAY_TICKS  = pdMS_TO_TICKS(30);
+    static constexpr uint8_t    FilterSmaWindow   = 4;
+
+    enum class CalibrationState : uint8_t
+    {
+        NONE = 0,
+        IN_PROGRESS,
+        DONE,
+        FAILED,
+    };
 
     enum class Detail : uint8_t
     {
@@ -42,6 +53,8 @@ public:
         CONFIG_FAILED,
         READ_FAILED,
         NO_SAMPLE,
+        CALIB_FAILED,
+        CALIB_NOT_DONE,
     };
 
     struct Error
@@ -108,13 +121,22 @@ public:
         DPS2000 = 3,
     };
 
+    struct FilterConfig
+    {
+        float    emaCutoffHz   = 2.0f;
+        float    attitudeAlpha = 0.98f;
+        uint16_t calibSamples  = 40;
+        uint8_t  calibDelayMs  = 20;
+    };
+
     struct Config
     {
-        AccelRange accelRange    = AccelRange::G2;
-        GyroRange  gyroRange     = GyroRange::DPS250;
-        uint8_t    dlpfCfg       = 3;
-        uint8_t    sampleRateDiv = 9;
-        bool       dataReadyInt  = false;
+        AccelRange   accelRange    = AccelRange::G2;
+        GyroRange    gyroRange     = GyroRange::DPS250;
+        uint8_t      dlpfCfg       = 3;
+        uint8_t      sampleRateDiv = 9;
+        bool         dataReadyInt  = false;
+        FilterConfig filter {};
     };
 
 public:
@@ -123,17 +145,29 @@ public:
 
     [[nodiscard]] Error setup();
     [[nodiscard]] Error readRawData();
+    [[nodiscard]] Error calibrateGyro();
 
     [[nodiscard]] Result3DStamped    getAccel() const;
     [[nodiscard]] Result3DStamped    getGyro() const;
     [[nodiscard]] ResultFloatStamped getTemp() const;
 
-    [[nodiscard]] bool       started() const;
-    [[nodiscard]] Error      lastError() const;
-    [[nodiscard]] TickType_t lastUpdate() const;
-    [[nodiscard]] RawSample  rawSample() const;
+    [[nodiscard]] Result3DStamped getFilteredAccel() const;
+    [[nodiscard]] Result3DStamped getFilteredGyro() const;
+
+    [[nodiscard]] Orientation getOrientation() const;
+    [[nodiscard]] Quaternion  getQuaternion() const;
+    [[nodiscard]] float       getPitch() const;
+    [[nodiscard]] float       getRoll() const;
+    [[nodiscard]] float       getYaw() const;
+
+    [[nodiscard]] CalibrationState calibrationState() const;
+    [[nodiscard]] bool             started() const;
+    [[nodiscard]] Error            lastError() const;
+    [[nodiscard]] TickType_t       lastUpdate() const;
+    [[nodiscard]] RawSample        rawSample() const;
 
     static const char* detailName(Detail detail) noexcept;
+    static const char* calibrationStateName(CalibrationState state) noexcept;
 
 private:
     IIC&       m_iic;
@@ -144,6 +178,13 @@ private:
     Error      m_lastError {};
     RawSample  m_data {};
     TickType_t m_lastUpdate = 0;
+
+    Vector3DSMAEMACascade<FilterSmaWindow> m_accelFilter;
+    Vector3DSMAEMACascade<FilterSmaWindow> m_gyroFilter;
+    AttitudeEstimator                      m_attitude;
+    Vector3D<float>                        m_gyroBias {};
+    CalibrationState                       m_calibState     = CalibrationState::NONE;
+    TickType_t                             m_lastFilterTick = 0;
 
 private:
     [[nodiscard]] Error makeError(StdError code, Detail detail, IIC::Error iic = {});
@@ -156,4 +197,6 @@ private:
 
     [[nodiscard]] static bool    validAddress(uint8_t address);
     [[nodiscard]] static int16_t be16(uint8_t hi, uint8_t lo);
+
+    void applyFilters();
 };

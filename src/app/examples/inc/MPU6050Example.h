@@ -23,10 +23,25 @@ namespace MPU6050Example
         constexpr uint8_t     SclPin         = IIC::DefaultSclPin;
         constexpr uint32_t    IicFrequency   = IIC::DefaultFrequency;
         constexpr uint8_t     MpuAddress     = I2C_MPU6050::MPU6050_ADDR_LOW;
-        constexpr TickType_t  TaskPeriod     = pdMS_TO_TICKS(50);
+        constexpr TickType_t  TaskPeriodMs   = 50;
+        constexpr TickType_t  TaskPeriod     = pdMS_TO_TICKS(TaskPeriodMs);
         constexpr uint32_t    LogIntervalMs  = 500;
         constexpr uint32_t    TaskStackWords = 4096;
         constexpr UBaseType_t TaskPriority   = 4;
+
+        const I2C_MPU6050::Config MpuCfg {
+            .accelRange    = I2C_MPU6050::AccelRange::G2,
+            .gyroRange     = I2C_MPU6050::GyroRange::DPS250,
+            .dlpfCfg       = 3,
+            .sampleRateDiv = 9,
+            .dataReadyInt  = false,
+            .filter {
+                .emaCutoffHz   = 2.0f,
+                .attitudeAlpha = 0.98f,
+                .calibSamples  = 40,
+                .calibDelayMs  = 20,
+            },
+        };
 
         struct Context
         {
@@ -43,7 +58,7 @@ namespace MPU6050Example
             dvc::Serial          serial {AppConfig::Hardware::SerialBaudrate};
             SerialConsoleService console {serial};
             IIC                  iic {SdaPin, SclPin, IicFrequency};
-            I2C_MPU6050          mpu {MpuAddress, iic};
+            I2C_MPU6050          mpu {MpuAddress, iic, MpuCfg};
 
             TaskHandle_t taskHandle = nullptr;
             uint32_t     lastLogMs  = 0;
@@ -67,32 +82,27 @@ namespace MPU6050Example
         }
 
         inline void logSample(Context& app) {
-            const auto accel = app.mpu.getAccel();
-            const auto gyro  = app.mpu.getGyro();
+            const auto accel = app.mpu.getFilteredAccel();
+            const auto gyro  = app.mpu.getFilteredGyro();
             const auto temp  = app.mpu.getTemp();
+            const auto ori   = app.mpu.getOrientation();
 
-            if (!accel.error) {
-                logError(app, "getAccel", accel.error);
-                return;
-            }
-            if (!gyro.error) {
-                logError(app, "getGyro", gyro.error);
-                return;
-            }
-            if (!temp.error) {
-                logError(app, "getTemp", temp.error);
+            if (!accel.error || !gyro.error || !temp.error) {
                 return;
             }
 
             app.console.info(
-                "MPU6050 tick=%lu accel[g]=%.3f %.3f %.3f gyro[dps]=%.2f %.2f %.2f temp=%.2fC",
-                static_cast<unsigned long>(accel.vec.timestamp),
+                "MPU6050 tick=%lu accel[g]=%.3f %.3f %.3f gyro[dps]=%.2f %.2f %.2f pitch=%.1f roll=%.1f yaw=%.1f temp=%.2fC",
+                static_cast<unsigned long>(app.mpu.lastUpdate()),
                 static_cast<double>(accel.vec.vector.x),
                 static_cast<double>(accel.vec.vector.y),
                 static_cast<double>(accel.vec.vector.z),
                 static_cast<double>(gyro.vec.vector.x),
                 static_cast<double>(gyro.vec.vector.y),
                 static_cast<double>(gyro.vec.vector.z),
+                static_cast<double>(ori.pitch),
+                static_cast<double>(ori.roll),
+                static_cast<double>(ori.yaw),
                 static_cast<double>(temp.value));
         }
 
@@ -111,7 +121,7 @@ namespace MPU6050Example
                     if (!err) {
                         logError(app, "readRawData", err);
                     }
-                    else {
+                    else if (app.mpu.calibrationState() == I2C_MPU6050::CalibrationState::DONE) {
                         logSample(app);
                     }
                 }
@@ -173,6 +183,18 @@ namespace MPU6050Example
             app.console.printState(app.nodeInfo.getNodeState());
             return;
         }
+
+        app.console.info("starting gyro calibration...");
+        const auto calibErr = app.mpu.calibrateGyro();
+        if (!calibErr) {
+            app.nodeInfo.updateNodeState(ERROR);
+            app.console.error("gyro calibration failed: %s state=%s",
+                              I2C_MPU6050::detailName(calibErr.detail),
+                              I2C_MPU6050::calibrationStateName(app.mpu.calibrationState()));
+            app.console.printState(app.nodeInfo.getNodeState());
+            return;
+        }
+        app.console.info("gyro calibrated: state=%s", I2C_MPU6050::calibrationStateName(app.mpu.calibrationState()));
 
         app.nodeInfo.updateNodeState(RUNNING);
         app.console.printState(app.nodeInfo.getNodeState());

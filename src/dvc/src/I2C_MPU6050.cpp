@@ -60,6 +60,10 @@ I2C_MPU6050::Error I2C_MPU6050::setup() {
     if (!err)
         return err;
 
+    m_accelFilter.configure(m_config.filter.emaCutoffHz);
+    m_gyroFilter.configure(m_config.filter.emaCutoffHz);
+    m_attitude.configure(m_config.filter.attitudeAlpha);
+
     m_started = true;
     return clearError();
 }
@@ -85,6 +89,44 @@ I2C_MPU6050::Error I2C_MPU6050::readRawData() {
 
     m_lastUpdate = xTaskGetTickCount();
     m_hasSample  = true;
+
+    if (m_calibState == CalibrationState::DONE) {
+        applyFilters();
+    }
+
+    return clearError();
+}
+
+I2C_MPU6050::Error I2C_MPU6050::calibrateGyro() {
+    if (!m_started)
+        return makeError(StdError::INVALID_STATE, Detail::NOT_STARTED);
+
+    m_calibState = CalibrationState::IN_PROGRESS;
+
+    Vector3D<float> sum {};
+    uint32_t        count = 0;
+
+    for (uint16_t i = 0; i < m_config.filter.calibSamples; ++i) {
+        uint8_t    buf[sizeof(RawSample)] {};
+        IIC::Error iicErr = m_iic.readRegister(m_addr, REG_ACCEL_XOUT_H, buf, sizeof(buf));
+        if (!iicErr) {
+            m_calibState = CalibrationState::FAILED;
+            return mapIicError(iicErr, Detail::CALIB_FAILED);
+        }
+
+        sum.x += static_cast<float>(be16(buf[8], buf[9])) / gyroScale();
+        sum.y += static_cast<float>(be16(buf[10], buf[11])) / gyroScale();
+        sum.z += static_cast<float>(be16(buf[12], buf[13])) / gyroScale();
+        ++count;
+
+        vTaskDelay(pdMS_TO_TICKS(m_config.filter.calibDelayMs));
+    }
+
+    m_gyroBias.x = sum.x / static_cast<float>(count);
+    m_gyroBias.y = sum.y / static_cast<float>(count);
+    m_gyroBias.z = sum.z / static_cast<float>(count);
+    m_calibState = CalibrationState::DONE;
+
     return clearError();
 }
 
@@ -121,6 +163,59 @@ I2C_MPU6050::ResultFloatStamped I2C_MPU6050::getTemp() const {
     }
 
     return {err, m_lastUpdate, m_data.temp / 340.0f + 36.53f};
+}
+
+I2C_MPU6050::Result3DStamped I2C_MPU6050::getFilteredAccel() const {
+    const Error err = !m_started     ? Error {.code = StdError::INVALID_STATE, .detail = Detail::NOT_STARTED}
+                      : !m_hasSample ? Error {.code = StdError::NOT_FINISHED, .detail = Detail::NO_SAMPLE}
+                                     : m_lastError;
+    if (!err) {
+        return {err, m_lastUpdate, 0, 0, 0};
+    }
+
+    const auto f = m_accelFilter.current();
+    return {err, m_lastUpdate, f.x, f.y, f.z};
+}
+
+I2C_MPU6050::Result3DStamped I2C_MPU6050::getFilteredGyro() const {
+    const Error err = !m_started     ? Error {.code = StdError::INVALID_STATE, .detail = Detail::NOT_STARTED}
+                      : !m_hasSample ? Error {.code = StdError::NOT_FINISHED, .detail = Detail::NO_SAMPLE}
+                                     : m_lastError;
+    if (!err) {
+        return {err, m_lastUpdate, 0, 0, 0};
+    }
+
+    const auto f = m_gyroFilter.current();
+    return {err, m_lastUpdate, f.x, f.y, f.z};
+}
+
+Orientation I2C_MPU6050::getOrientation() const {
+    Orientation o;
+    o.pitch = m_attitude.angle.pitch;
+    o.roll  = m_attitude.angle.roll;
+    o.yaw   = m_attitude.angle.yaw;
+    o.quat  = eulerToQuaternion(o.pitch, o.roll, o.yaw);
+    return o;
+}
+
+Quaternion I2C_MPU6050::getQuaternion() const {
+    return eulerToQuaternion(m_attitude.angle.pitch, m_attitude.angle.roll, m_attitude.angle.yaw);
+}
+
+float I2C_MPU6050::getPitch() const {
+    return m_attitude.angle.pitch;
+}
+
+float I2C_MPU6050::getRoll() const {
+    return m_attitude.angle.roll;
+}
+
+float I2C_MPU6050::getYaw() const {
+    return m_attitude.angle.yaw;
+}
+
+I2C_MPU6050::CalibrationState I2C_MPU6050::calibrationState() const {
+    return m_calibState;
 }
 
 bool I2C_MPU6050::started() const {
@@ -169,6 +264,25 @@ const char* I2C_MPU6050::detailName(Detail detail) noexcept {
             return "READ_FAILED";
         case Detail::NO_SAMPLE:
             return "NO_SAMPLE";
+        case Detail::CALIB_FAILED:
+            return "CALIB_FAILED";
+        case Detail::CALIB_NOT_DONE:
+            return "CALIB_NOT_DONE";
+    }
+
+    return "UNKNOWN";
+}
+
+const char* I2C_MPU6050::calibrationStateName(CalibrationState state) noexcept {
+    switch (state) {
+        case CalibrationState::NONE:
+            return "NONE";
+        case CalibrationState::IN_PROGRESS:
+            return "IN_PROGRESS";
+        case CalibrationState::DONE:
+            return "DONE";
+        case CalibrationState::FAILED:
+            return "FAILED";
     }
 
     return "UNKNOWN";
@@ -233,4 +347,23 @@ bool I2C_MPU6050::validAddress(uint8_t address) {
 
 int16_t I2C_MPU6050::be16(uint8_t hi, uint8_t lo) {
     return static_cast<int16_t>((static_cast<uint16_t>(hi) << 8) | lo);
+}
+
+void I2C_MPU6050::applyFilters() {
+    const float scaleAccel = accelScale();
+    const float scaleGyro  = gyroScale();
+    const float ax         = static_cast<float>(m_data.accelX) / scaleAccel;
+    const float ay         = static_cast<float>(m_data.accelY) / scaleAccel;
+    const float az         = static_cast<float>(m_data.accelZ) / scaleAccel;
+    const float gx         = static_cast<float>(m_data.gyroX) / scaleGyro - m_gyroBias.x;
+    const float gy         = static_cast<float>(m_data.gyroY) / scaleGyro - m_gyroBias.y;
+    const float gz         = static_cast<float>(m_data.gyroZ) / scaleGyro - m_gyroBias.z;
+
+    const float dtSec = m_lastFilterTick == 0 ? 0.0f
+                                              : static_cast<float>(m_lastUpdate - m_lastFilterTick) / static_cast<float>(configTICK_RATE_HZ);
+    m_lastFilterTick  = m_lastUpdate;
+
+    m_accelFilter.update(ax, ay, az, dtSec);
+    m_gyroFilter.update(gx, gy, gz, dtSec);
+    m_attitude.update(gx, gy, gz, ax, ay, az, dtSec);
 }
