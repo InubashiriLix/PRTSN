@@ -107,17 +107,10 @@ namespace
 
 SSD1306::SSD1306(IIC& iic, uint8_t address)
     : m_iic(&iic),
-      m_ownsIic(false),
       m_address(address) {}
 
-SSD1306::SSD1306(uint8_t sdaPin, uint8_t sclPin, uint32_t frequency, uint8_t address)
-    : m_ownedIic(sdaPin, sclPin, frequency),
-      m_iic(&m_ownedIic),
-      m_ownsIic(true),
-      m_address(address) {}
-
-bool SSD1306::begin() {
-    if (m_iic == nullptr || !m_iic->begin() || !m_iic->devicePresent(m_address)) {
+bool SSD1306::setup() {
+    if (m_iic == nullptr || !m_iic->started() || !m_iic->devicePresent(m_address)) {
         m_started = false;
         return false;
     }
@@ -160,15 +153,12 @@ bool SSD1306::begin() {
 
 void SSD1306::end() {
     if (m_started) {
-        static constexpr uint8_t off[] = {0xAE};
+        static constexpr uint8_t off[] = {0x2E, 0xAE};
         command(off, sizeof(off));
     }
 
-    if (m_ownsIic && m_iic != nullptr) {
-        m_iic->end();
-    }
-
-    m_started = false;
+    m_scrollActive = false;
+    m_started      = false;
 }
 
 bool SSD1306::clear(bool flush) {
@@ -204,19 +194,111 @@ bool SSD1306::inverted() const {
     return m_inverted;
 }
 
+bool SSD1306::startHorizontalScroll(ScrollDirection direction,
+                                    uint8_t         startPage,
+                                    uint8_t         endPage,
+                                    ScrollInterval  interval) {
+    if (!m_started || startPage >= Pages || endPage >= Pages || startPage > endPage) {
+        return false;
+    }
+
+    m_scrollDirection = direction;
+    m_scrollInterval  = interval;
+    m_scrollStartPage = startPage;
+    m_scrollEndPage   = endPage;
+
+    if (!setScrollActive(false) || !setScrollActive(true)) {
+        m_scrollActive = false;
+        return false;
+    }
+
+    return true;
+}
+
+bool SSD1306::stopScroll() {
+    if (!m_started) {
+        return false;
+    }
+
+    return setScrollActive(false);
+}
+
 bool SSD1306::display() {
     if (!m_started) {
         return false;
     }
 
+    const bool resumeScroll = m_scrollActive;
+    if (resumeScroll && !setScrollActive(false)) {
+        return false;
+    }
+
     // clang-format off
     static constexpr uint8_t window[] = {
-        0x21, 0x00,Width - 1,
-        0x22,0x00,Pages - 1,
+        0x21, 0x00, Width - 1,
+        0x22, 0x00, Pages - 1,
     };
     // clang-format on
 
-    return command(window, sizeof(window)) && data(m_buffer, sizeof(m_buffer));
+    const bool ok = command(window, sizeof(window)) && data(m_buffer, sizeof(m_buffer));
+    return ok && (!resumeScroll || setScrollActive(true));
+}
+
+bool SSD1306::displayRegion(uint8_t x, uint8_t y, uint8_t width, uint8_t height) {
+    if (width == 0 || height == 0 || x >= Width || y >= Height) {
+        return false;
+    }
+
+    const uint8_t clippedWidth  = width > Width - x ? Width - x : width;
+    const uint8_t clippedHeight = height > Height - y ? Height - y : height;
+    const uint8_t pageStart     = static_cast<uint8_t>(y / 8);
+    const uint8_t pageEnd       = static_cast<uint8_t>((y + clippedHeight - 1) / 8);
+
+    return displayPages(
+        pageStart,
+        static_cast<uint8_t>(pageEnd - pageStart + 1),
+        x,
+        clippedWidth);
+}
+
+bool SSD1306::displayPages(uint8_t pageStart, uint8_t pageCount, uint8_t columnStart, uint8_t columnCount) {
+    if (!m_started || pageCount == 0 || columnCount == 0 || pageStart >= Pages || columnStart >= Width) {
+        return false;
+    }
+
+    if (pageCount > Pages - pageStart) {
+        pageCount = static_cast<uint8_t>(Pages - pageStart);
+    }
+    if (columnCount > Width - columnStart) {
+        columnCount = static_cast<uint8_t>(Width - columnStart);
+    }
+
+    const uint8_t columnEnd    = static_cast<uint8_t>(columnStart + columnCount - 1);
+    const bool    resumeScroll = scrollOverlaps(pageStart, pageCount);
+    if (resumeScroll && !setScrollActive(false)) {
+        return false;
+    }
+
+    for (uint8_t page = pageStart; page < pageStart + pageCount; ++page) {
+        const uint8_t window[] = {
+            0x21,
+            columnStart,
+            columnEnd,
+            0x22,
+            page,
+            page,
+        };
+
+        if (!command(window, sizeof(window)) ||
+            !data(&m_buffer[static_cast<size_t>(page) * Width + columnStart], columnCount)) {
+            if (resumeScroll) {
+                setScrollActive(true);
+            }
+            return false;
+        }
+    }
+
+    return !resumeScroll || setScrollActive(true);
 }
 
 bool SSD1306::setPixel(uint8_t x, uint8_t y, Color color) {
@@ -339,20 +421,13 @@ bool SSD1306::command(const uint8_t* bytes, size_t length) {
         return false;
     }
 
-    while (length > 0) {
-        uint8_t      packet[17] = {CommandControlByte};
-        const size_t chunk      = length > sizeof(packet) - 1 ? sizeof(packet) - 1 : length;
+    const uint8_t          control = CommandControlByte;
+    const IIC::WriteBuffer buffers[] {
+        {&control, 1},
+        {bytes, length},
+    };
 
-        std::memcpy(&packet[1], bytes, chunk);
-        if (!m_iic->write(m_address, packet, chunk + 1)) {
-            return false;
-        }
-
-        bytes += chunk;
-        length -= chunk;
-    }
-
-    return true;
+    return static_cast<bool>(m_iic->write(m_address, buffers, 2));
 }
 
 bool SSD1306::data(const uint8_t* bytes, size_t length) {
@@ -360,20 +435,52 @@ bool SSD1306::data(const uint8_t* bytes, size_t length) {
         return false;
     }
 
-    while (length > 0) {
-        uint8_t      packet[17] = {DataControlByte};
-        const size_t chunk      = length > sizeof(packet) - 1 ? sizeof(packet) - 1 : length;
+    const uint8_t          control = DataControlByte;
+    const IIC::WriteBuffer buffers[] {
+        {&control, 1},
+        {bytes, length},
+    };
 
-        std::memcpy(&packet[1], bytes, chunk);
-        if (!m_iic->write(m_address, packet, chunk + 1)) {
+    return static_cast<bool>(m_iic->write(m_address, buffers, 2));
+}
+
+bool SSD1306::setScrollActive(bool active) {
+    if (active) {
+        const uint8_t setupScroll[] = {
+            static_cast<uint8_t>(m_scrollDirection),
+            0x00,
+            m_scrollStartPage,
+            static_cast<uint8_t>(m_scrollInterval),
+            m_scrollEndPage,
+            0x00,
+            0xFF,
+        };
+        static constexpr uint8_t activateScroll[] = {0x2F};
+
+        if (!command(setupScroll, sizeof(setupScroll)) || !command(activateScroll, sizeof(activateScroll))) {
             return false;
         }
 
-        bytes += chunk;
-        length -= chunk;
+        m_scrollActive = true;
+        return true;
     }
 
+    static constexpr uint8_t deactivateScroll[] = {0x2E};
+    if (!command(deactivateScroll, sizeof(deactivateScroll))) {
+        return false;
+    }
+
+    m_scrollActive = false;
     return true;
+}
+
+bool SSD1306::scrollOverlaps(uint8_t pageStart, uint8_t pageCount) const {
+    if (!m_scrollActive || pageCount == 0) {
+        return false;
+    }
+
+    const uint8_t pageEnd = static_cast<uint8_t>(pageStart + pageCount - 1);
+    return pageStart <= m_scrollEndPage && pageEnd >= m_scrollStartPage;
 }
 
 bool SSD1306::validTextStyle(const TextStyle& style) const {
