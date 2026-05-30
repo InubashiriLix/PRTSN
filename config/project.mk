@@ -34,9 +34,8 @@ BAUD ?= 115200
 #   BUILD_DEFINES += -DPRTN_NODE_PROFILE=PRTN_NODE_PROFILE_AMA10
 #
 # Feature gates:
-#   -DPRTN_ENABLE_IIC=1  Enable IIC implementation and link Arduino Wire.
-#                        Leave it disabled when no I2C device is used; Wire adds
-#                        code and global objects even if no IIC object is created.
+#   -DPRTN_ENABLE_IIC=1          Enable the ESP-IDF driver based IIC implementation.
+#   -DPRTN_ENABLE_ARDUINO_IIC=1  Enable the legacy Arduino Wire based IIC implementation.
 BUILD_DEFINES :=
 
 # Optional optimization override.
