@@ -1,7 +1,11 @@
 #pragma once
-// #include <BLEDriver.h>
+
+#include "src/cfg/BuildConfig.h"
+
+#if PRTN_ENABLE_BLE
 #include <BLEServer.h>
 #include <BLEAdvertising.h>
+#endif
 
 class BLE
 {

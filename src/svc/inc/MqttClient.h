@@ -5,7 +5,9 @@
 
 #include "src/cfg/AppConfig.h"
 
+#if PRTN_ENABLE_WIFI
 #include <WiFi.h>
+#endif
 #include <cstddef>
 #include <cstdint>
 #include <functional>

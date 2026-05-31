@@ -1,3 +1,7 @@
+#include "src/cfg/BuildConfig.h"
+
+#if PRTN_ENABLE_WIFI
+
 #include "src/svc/inc/wifi.h"
 
 #include <WiFi.h>
@@ -229,3 +233,5 @@ bool Wifi::startStaRadio() {
 
     return esp_wifi_set_channel(m_config.sta.channel, WIFI_SECOND_CHAN_NONE) == ESP_OK;
 }
+
+#endif
