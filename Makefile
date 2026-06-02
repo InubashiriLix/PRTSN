@@ -11,6 +11,14 @@ BUILD_PROPERTIES = $(if $(BUILD_FLAGS),--build-property compiler.c.extra_flags="
 SERIAL_TUI_DIR := tools/serial-tui
 SERIAL_TUI_BIN := $(SERIAL_TUI_DIR)/target/release/serial-tui
 
+GIF ?=
+GIF_OUT ?= src/app/assets/boot-anim.h
+GIF_NAME ?= LcdAnimation
+GIF_WIDTH ?= 80
+GIF_HEIGHT ?= 160
+GIF_FPS ?= 60
+GIF_FIT ?= contain
+
 ESP32_TOOLS := $(HOME)/.arduino15/packages/esp32/tools
 OPENOCD_ROOT := $(lastword $(sort $(wildcard $(ESP32_TOOLS)/openocd-esp32/*)))
 OPENOCD_BIN := $(OPENOCD_ROOT)/bin/openocd
@@ -31,7 +39,7 @@ GREEN  := \033[32m
 YELLOW := \033[33m
 CYAN   := \033[36m
 
-.PHONY: help info board-options check compdb build debug-build debug-server debug-gdb upload monitor monitor-arduino serial-tui tools list-ports clean clean-log format format-check
+.PHONY: help info board-options check compdb build debug-build debug-server debug-gdb upload monitor monitor-arduino serial-tui tools gif-to-rgb565 list-ports clean clean-log format format-check
 
 define section
 	@printf "\n$(BOLD)$(CYAN)==> %s$(RESET)\n" "$(1)"
@@ -81,6 +89,8 @@ help:
 	@printf "                    构建 Rust 串口 TUI 工具\n"
 	@printf "  $(CYAN)make tools$(RESET)        Build local development tools\n"
 	@printf "                    构建本地开发工具\n"
+	@printf "  $(CYAN)make gif-to-rgb565 GIF=input.gif$(RESET) Convert GIF to LCD RGB565 header\n"
+	@printf "                    转换 GIF 为 LCD RGB565 头文件\n"
 	@printf "  $(CYAN)make list-ports$(RESET)   List connected boards and ports\n"
 	@printf "                    列出已连接的板子和串口\n"
 	@printf "  $(CYAN)make info$(RESET)         Show current project configuration\n"
@@ -252,6 +262,17 @@ serial-tui:
 
 tools: serial-tui
 
+gif-to-rgb565:
+	$(call section,Converting GIF to LCD RGB565 / 转换 GIF 为 LCD RGB565)
+	@if [ -z "$(GIF)" ]; then \
+		printf "$(RED)✗ missing GIF input$(RESET)\n"; \
+		printf "Usage / 用法:\n  make gif-to-rgb565 GIF=input.gif GIF_OUT=src/app/assets/boot-anim.h GIF_NAME=LcdAnimation GIF_WIDTH=80 GIF_HEIGHT=160 GIF_FIT=contain\n"; \
+		exit 1; \
+	fi
+	$(call cmd,python3 tools/gif_to_rgb565.py "$(GIF)" -o "$(GIF_OUT)" --name "$(GIF_NAME)" --width $(GIF_WIDTH) --height $(GIF_HEIGHT) --fps $(GIF_FPS) --fit "$(GIF_FIT)")
+	@python3 tools/gif_to_rgb565.py "$(GIF)" -o "$(GIF_OUT)" --name "$(GIF_NAME)" --width $(GIF_WIDTH) --height $(GIF_HEIGHT) --fps $(GIF_FPS) --fit "$(GIF_FIT)"
+	$(call ok,GIF converted / GIF 已转换)
+
 upload:
 	$(call section,Uploading firmware / 上传固件)
 	@if [ ! -e "$(PORT)" ]; then \
@@ -307,4 +328,3 @@ format-check:
 	$(call cmd,clang-format --dry-run --Werror $(FORMAT_FILES))
 	@clang-format --dry-run --Werror $(FORMAT_FILES)
 	$(call ok,formatting correct / 格式正确)
-
