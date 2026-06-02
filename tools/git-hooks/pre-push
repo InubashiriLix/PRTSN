@@ -1,0 +1,20 @@
+#!/bin/sh
+
+set -eu
+
+echo "==> pre-push: checking format"
+if ! make format-check; then
+    echo 
+    echo "pre-push failed: format check failed"
+    echo "run: make format"
+    exit 1
+fi
+
+echo "==> pre-push: checking build"
+if ! make build; then
+    echo 
+    echo "pre-push failed: firmware build failed"
+    echo "run: make build to rebuild or check errors"
+    echo "fix the compiler errors above, then push again"
+    exit 1
+fi

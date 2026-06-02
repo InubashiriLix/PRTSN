@@ -19,9 +19,18 @@ local arduino_cli = vim.fn.exepath("arduino-cli")
 local arduino_ls = vim.fn.exepath("arduino-language-server")
 local esp_rv32_query_driver = vim.fn.expand("~/.arduino15/packages/esp32/tools/esp-rv32/*/bin/riscv32-esp-elf-*")
 local project_root = vim.fs.root(vim.fn.getcwd(), { ".lazy.lua", "PRTN.ino", "compile_commands.json" }) or vim.fn.getcwd()
+local debug_elf = project_root .. "/build/PRTN.ino.elf"
 local arduino_clangd = project_root .. "/tools/clangd-esp32"
 local clangd_db_dir = project_root .. "/.clangd-db"
 local clangd_db_path = clangd_db_dir .. "/compile_commands.json"
+
+local function newest_glob(pattern)
+	local matches = vim.fn.glob(vim.fn.expand(pattern), true, true)
+	table.sort(matches)
+	return matches[#matches] or ""
+end
+
+local codelldb = vim.fn.exepath("codelldb")
 
 if clangd == "" then
 	clangd = "clangd"
@@ -31,6 +40,9 @@ if arduino_cli == "" then
 end
 if arduino_ls == "" then
 	arduino_ls = "arduino-language-server"
+end
+if codelldb == "" then
+	codelldb = newest_glob("~/.local/share/nvim/mason/packages/codelldb/extension/adapter/codelldb")
 end
 if vim.fn.executable(arduino_clangd) == 0 then
 	arduino_clangd = clangd
@@ -321,6 +333,87 @@ local function prtn_root(bufnr_or_fname, on_dir)
 end
 
 return {
+	{
+		"mfussenegger/nvim-dap",
+		keys = {
+			{
+				"<leader>db",
+				function()
+					require("dap").toggle_breakpoint()
+				end,
+				desc = "Toggle breakpoint",
+			},
+			{
+				"<leader>dc",
+				function()
+					require("dap").continue()
+				end,
+				desc = "Debug continue",
+			},
+			{
+				"<leader>di",
+				function()
+					require("dap").step_into()
+				end,
+				desc = "Step into",
+			},
+			{
+				"<leader>do",
+				function()
+					require("dap").step_over()
+				end,
+				desc = "Step over",
+			},
+			{
+				"<leader>dO",
+				function()
+					require("dap").step_out()
+				end,
+				desc = "Step out",
+			},
+			{
+				"<leader>dr",
+				function()
+					require("dap").repl.open()
+				end,
+				desc = "Debug REPL",
+			},
+		},
+		config = function()
+			local dap = require("dap")
+
+			if vim.fn.executable(codelldb) == 0 then
+				vim.notify("codelldb not found. Run :MasonInstall codelldb for ESP32-C3 nvim-dap debugging.", vim.log.levels.WARN)
+				return
+			end
+
+			dap.adapters.codelldb = {
+				type = "server",
+				port = "${port}",
+				executable = {
+					command = codelldb,
+					args = { "--port", "${port}" },
+				},
+			}
+
+			local esp32c3_attach = {
+				name = "ESP32-C3: Attach OpenOCD",
+				type = "codelldb",
+				request = "launch",
+				cwd = project_root,
+				targetCreateCommands = {
+					"target create " .. debug_elf,
+				},
+				processCreateCommands = {
+					"gdb-remote localhost:3333",
+				},
+			}
+
+			dap.configurations.c = { esp32c3_attach }
+			dap.configurations.cpp = { esp32c3_attach }
+			dap.configurations.arduino = { esp32c3_attach }
+		end,
+	},
 	{
 		"neovim/nvim-lspconfig",
 		opts = {

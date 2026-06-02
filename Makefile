@@ -5,13 +5,31 @@ BASE_FQBN := $(BOARD_PACKAGE):$(BOARD_ARCH):$(BOARD_ID)
 FQBN_OPTIONS := UploadSpeed=$(UPLOAD_SPEED),CDCOnBoot=$(CDC_ON_BOOT),CPUFreq=$(CPU_FREQ),FlashFreq=$(FLASH_FREQ),PartitionScheme=$(PARTITION_SCHEME),DebugLevel=$(DEBUG_LEVEL),EraseFlash=$(ERASE_FLASH)
 FQBN := $(BASE_FQBN):$(FQBN_OPTIONS)
 
-BUILD_FLAGS := $(strip $(BUILD_DEFINES) $(BUILD_OPT_FLAGS))
-ifneq ($(BUILD_FLAGS),)
-BUILD_PROPERTIES := --build-property compiler.c.extra_flags="$(BUILD_FLAGS)" --build-property compiler.cpp.extra_flags="$(BUILD_FLAGS)"
-endif
+BUILD_FLAGS = $(strip $(BUILD_DEFINES) $(BUILD_OPT_FLAGS))
+BUILD_PROPERTIES = $(if $(BUILD_FLAGS),--build-property compiler.c.extra_flags="$(BUILD_FLAGS)" --build-property compiler.cpp.extra_flags="$(BUILD_FLAGS)")
 
 SERIAL_TUI_DIR := tools/serial-tui
 SERIAL_TUI_BIN := $(SERIAL_TUI_DIR)/target/release/serial-tui
+
+GIF ?=
+GIF_OUT ?= src/app/assets/boot-anim.h
+GIF_NAME ?= LcdAnimation
+GIF_WIDTH ?= 80
+GIF_HEIGHT ?= 160
+GIF_FPS ?= 60
+GIF_FIT ?= contain
+
+ESP32_TOOLS := $(HOME)/.arduino15/packages/esp32/tools
+OPENOCD_ROOT := $(lastword $(sort $(wildcard $(ESP32_TOOLS)/openocd-esp32/*)))
+OPENOCD_BIN := $(OPENOCD_ROOT)/bin/openocd
+OPENOCD_SCRIPTS := $(OPENOCD_ROOT)/share/openocd/scripts
+OPENOCD_BOARD_CFG ?= board/esp32c3-builtin.cfg
+GDB_ROOT := $(lastword $(sort $(wildcard $(ESP32_TOOLS)/riscv32-esp-elf-gdb/*)))
+GDB_BIN := $(GDB_ROOT)/bin/riscv32-esp-elf-gdb
+DEBUG_ELF := $(BUILD_DIR)/PRTN.ino.elf
+DEBUG_GDB_PORT ?= 3333
+
+FORMAT_FILES := $(shell git ls-files '*.h' '*.hpp' '*.c' '*.cpp' '*.cc' '*.cxx' '*.ino')
 
 RESET  := \033[0m
 BOLD   := \033[1m
@@ -21,7 +39,7 @@ GREEN  := \033[32m
 YELLOW := \033[33m
 CYAN   := \033[36m
 
-.PHONY: help info board-options check compdb build upload monitor monitor-arduino serial-tui tools list-ports clean clean-log
+.PHONY: help info board-options check compdb build debug-build debug-server debug-gdb upload monitor monitor-arduino serial-tui tools gif-to-rgb565 list-ports clean clean-log format format-check
 
 define section
 	@printf "\n$(BOLD)$(CYAN)==> %s$(RESET)\n" "$(1)"
@@ -40,7 +58,7 @@ define fail
 endef
 
 define cmd
-	@printf "$(DIM)$ %s$(RESET)\n" "$(1)"
+	@printf '$(DIM)$ %s$(RESET)\n' '$(1)'
 endef
 
 help:
@@ -55,6 +73,12 @@ help:
 	@printf "                    为 clangd 生成 compile_commands.json\n"
 	@printf "  $(CYAN)make build$(RESET)        Compile firmware\n"
 	@printf "                    编译固件\n"
+	@printf "  $(CYAN)make debug-build$(RESET)  Compile firmware with debug-friendly flags\n"
+	@printf "                    使用适合单步调试的参数编译固件\n"
+	@printf "  $(CYAN)make debug-server$(RESET) Start ESP32-C3 USB JTAG OpenOCD server\n"
+	@printf "                    启动 ESP32-C3 USB JTAG OpenOCD 调试服务器\n"
+	@printf "  $(CYAN)make debug-gdb$(RESET)    Connect terminal GDB to OpenOCD\n"
+	@printf "                    使用终端 GDB 连接 OpenOCD\n"
 	@printf "  $(CYAN)make upload$(RESET)       Upload firmware to $(BOLD)$(PORT)$(RESET)\n"
 	@printf "                    上传固件到 $(BOLD)$(PORT)$(RESET)\n"
 	@printf "  $(CYAN)make monitor$(RESET)      Open serial monitor at $(BOLD)$(BAUD)$(RESET)\n"
@@ -65,6 +89,8 @@ help:
 	@printf "                    构建 Rust 串口 TUI 工具\n"
 	@printf "  $(CYAN)make tools$(RESET)        Build local development tools\n"
 	@printf "                    构建本地开发工具\n"
+	@printf "  $(CYAN)make gif-to-rgb565 GIF=input.gif$(RESET) Convert GIF to LCD RGB565 header\n"
+	@printf "                    转换 GIF 为 LCD RGB565 头文件\n"
 	@printf "  $(CYAN)make list-ports$(RESET)   List connected boards and ports\n"
 	@printf "                    列出已连接的板子和串口\n"
 	@printf "  $(CYAN)make info$(RESET)         Show current project configuration\n"
@@ -75,6 +101,11 @@ help:
 	@printf "                    删除本地构建输出\n"
 	@printf "  $(CYAN)make clean-log$(RESET)    Remove Neovim LSP log\n"
 	@printf "                    删除 Neovim LSP 日志\n\n"
+	@printf "  $(BOLD)make format$(RESET)       Format source files with clang-format\n"
+	@printf "                    使用 clang-format 格式化源代码\n"
+	@printf "  $(BOLD)make format-check$(RESET) Check source files format with clang-format\n"
+	@printf "                    使用clang-format检查源码格式\n"
+
 
 	@printf "$(BOLD)Config / 当前配置$(RESET)\n"
 	@printf "  FQBN      = $(FQBN)\n"
@@ -112,6 +143,9 @@ info:
 	@printf "Baud   / 波特率    : $(BAUD)\n"
 	@printf "Sketch             : $(SKETCH)\n"
 	@printf "Build dir / 构建目录: $(BUILD_DIR)\n"
+	@printf "Debug ELF          : $(DEBUG_ELF)\n"
+	@printf "OpenOCD            : $(OPENOCD_BIN)\n"
+	@printf "GDB                : $(GDB_BIN)\n"
 
 board-options:
 	$(call section,Board options / 板卡配置项)
@@ -133,6 +167,13 @@ check:
 		exit 0; \
 	}
 	$(call ok,clangd found / 已找到 clangd)
+
+	@command -v clang-format >/dev/null || { \
+		printf "$(YELLOW)! clang-format not found / 未找到 clang-format，make format 可能不可用, 同时如果启动了pre-commit 和 pre-push, 可能失败$(RESET)\n"; \
+		printf "Install / 安装:\n  sudo pacman -S clang-format\n"; \
+		exit 0; \
+	}
+	$(call ok,clang-format found / 已找到 clang-format)
 
 	@command -v arduino-language-server >/dev/null || { \
 		printf "$(YELLOW)! arduino-language-server not found / 未找到 arduino-language-server$(RESET)\n"; \
@@ -185,6 +226,34 @@ build:
 	@arduino-cli compile --fqbn $(FQBN) $(BUILD_PROPERTIES) --build-path $(BUILD_DIR) $(SKETCH)
 	$(call ok,build finished / 编译完成)
 
+debug-build: BUILD_OPT_FLAGS := -Og -g3
+debug-build: build
+
+debug-server:
+	$(call section,Starting ESP32-C3 OpenOCD server / 启动 ESP32-C3 OpenOCD 调试服务器)
+	@if [ ! -x "$(OPENOCD_BIN)" ]; then \
+		printf "$(RED)✗ OpenOCD not found / 未找到 OpenOCD: $(OPENOCD_BIN)$(RESET)\n"; \
+		printf "Run / 运行:\n  arduino-cli core install esp32:esp32\n"; \
+		exit 1; \
+	fi
+	$(call cmd,$(OPENOCD_BIN) -s $(OPENOCD_SCRIPTS) -f $(OPENOCD_BOARD_CFG))
+	@$(OPENOCD_BIN) -s $(OPENOCD_SCRIPTS) -f $(OPENOCD_BOARD_CFG)
+
+debug-gdb:
+	$(call section,Connecting GDB to OpenOCD / 使用 GDB 连接 OpenOCD)
+	@if [ ! -x "$(GDB_BIN)" ]; then \
+		printf "$(RED)✗ riscv32-esp-elf-gdb not found / 未找到 riscv32-esp-elf-gdb: $(GDB_BIN)$(RESET)\n"; \
+		printf "Run / 运行:\n  arduino-cli core install esp32:esp32\n"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(DEBUG_ELF)" ]; then \
+		printf "$(RED)✗ Debug ELF not found / 未找到调试 ELF: $(DEBUG_ELF)$(RESET)\n"; \
+		printf "Run / 运行:\n  make debug-build\n"; \
+		exit 1; \
+	fi
+	$(call cmd,$(GDB_BIN) -q $(DEBUG_ELF) -ex "target remote localhost:$(DEBUG_GDB_PORT)" -ex "monitor reset halt")
+	@$(GDB_BIN) -q $(DEBUG_ELF) -ex "target remote localhost:$(DEBUG_GDB_PORT)" -ex "monitor reset halt"
+
 serial-tui:
 	$(call section,Building serial TUI / 构建串口 TUI)
 	$(call cmd,cargo build --release --manifest-path $(SERIAL_TUI_DIR)/Cargo.toml)
@@ -192,6 +261,17 @@ serial-tui:
 	$(call ok,serial TUI ready / 串口 TUI 已就绪)
 
 tools: serial-tui
+
+gif-to-rgb565:
+	$(call section,Converting GIF to LCD RGB565 / 转换 GIF 为 LCD RGB565)
+	@if [ -z "$(GIF)" ]; then \
+		printf "$(RED)✗ missing GIF input$(RESET)\n"; \
+		printf "Usage / 用法:\n  make gif-to-rgb565 GIF=input.gif GIF_OUT=src/app/assets/boot-anim.h GIF_NAME=LcdAnimation GIF_WIDTH=80 GIF_HEIGHT=160 GIF_FIT=contain\n"; \
+		exit 1; \
+	fi
+	$(call cmd,python3 tools/gif_to_rgb565.py "$(GIF)" -o "$(GIF_OUT)" --name "$(GIF_NAME)" --width $(GIF_WIDTH) --height $(GIF_HEIGHT) --fps $(GIF_FPS) --fit "$(GIF_FIT)")
+	@python3 tools/gif_to_rgb565.py "$(GIF)" -o "$(GIF_OUT)" --name "$(GIF_NAME)" --width $(GIF_WIDTH) --height $(GIF_HEIGHT) --fps $(GIF_FPS) --fit "$(GIF_FIT)"
+	$(call ok,GIF converted / GIF 已转换)
 
 upload:
 	$(call section,Uploading firmware / 上传固件)
@@ -236,3 +316,15 @@ clean-log:
 	$(call cmd,rm -f ~/.local/state/nvim/lsp.log)
 	@rm -f ~/.local/state/nvim/lsp.log
 	$(call ok,lsp.log removed / lsp.log 已删除)
+
+format:
+	$(call section,Formatting source files / 格式化源代码)
+	$(call cmd,clang-format -i $(FORMAT_FILES))
+	@clang-format -i $(FORMAT_FILES)
+	$(call ok,formatting finished / 格式化完成)
+
+format-check:
+	$(call section,Checking source file formatting / 检查源代码格式)
+	$(call cmd,clang-format --dry-run --Werror $(FORMAT_FILES))
+	@clang-format --dry-run --Werror $(FORMAT_FILES)
+	$(call ok,formatting correct / 格式正确)

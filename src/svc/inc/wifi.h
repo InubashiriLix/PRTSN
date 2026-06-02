@@ -47,9 +47,9 @@ class Wifi
 {
 public:
     static constexpr uint32_t DefaultStaReconnectMs = 5000;
-    static constexpr uint8_t  DefaultStaChannel = 1;
-    static constexpr uint8_t  DefaultApChannel = 1;
-    static constexpr uint8_t  DefaultApMaxClients = 4;
+    static constexpr uint8_t  DefaultStaChannel     = 1;
+    static constexpr uint8_t  DefaultApChannel      = 1;
+    static constexpr uint8_t  DefaultApMaxClients   = 4;
 
     enum class Mode : uint8_t
     {

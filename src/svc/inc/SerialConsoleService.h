@@ -26,11 +26,11 @@ public:
 
     struct Command
     {
-        const char* name        = nullptr;
-        Handler     handler     = nullptr;
+        const char*    name           = nullptr;
+        Handler        handler        = nullptr;
         ContextHandler contextHandler = nullptr;
         void*          context        = nullptr;
-        const char* description = nullptr;
+        const char*    description    = nullptr;
 
         bool operator==(const Command& other) const;
     };

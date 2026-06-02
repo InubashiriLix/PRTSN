@@ -1,3 +1,7 @@
+#include "src/cfg/BuildConfig.h"
+
+#if PRTN_ENABLE_WIFI
+
 #include "../inc/MqttClient.h"
 
 #include <Arduino.h>
@@ -64,7 +68,7 @@ namespace
     }
 
     bool readRemainingLength(WiFiClient& client, uint32_t& outLen, uint32_t timeoutMs) {
-        outLen = 0;
+        outLen              = 0;
         uint32_t multiplier = 1;
 
         for (uint8_t i = 0; i < 4; ++i) {
@@ -184,7 +188,7 @@ bool MqttClient::connect() {
     }
 
     m_lastConnectAttemptMs = nowMs;
-    m_mqttConnected = false;
+    m_mqttConnected        = false;
     m_tcp.stop();
 
     emitEvent({.type = EventType::ConnectAttempt});
@@ -204,8 +208,8 @@ bool MqttClient::connect() {
     }
 
     m_mqttConnected = true;
-    m_lastRxMs = millis();
-    m_lastTxMs = m_lastRxMs;
+    m_lastRxMs      = millis();
+    m_lastTxMs      = m_lastRxMs;
     emitEvent({.type = EventType::Connected});
     return true;
 }
@@ -258,11 +262,11 @@ bool MqttClient::publish(const char* topic, const uint8_t* payload, size_t paylo
         return false;
     }
 
-    const size_t topicLen = strlen(topic);
+    const size_t   topicLen        = strlen(topic);
     const uint32_t remainingLength = 2 + topicLen + payloadLen;
-    const uint16_t packetLimit = m_config.maxPacketSize < AppConfig::Mqtt::ClientPacketBufferSize
-                                     ? m_config.maxPacketSize
-                                     : AppConfig::Mqtt::ClientPacketBufferSize;
+    const uint16_t packetLimit     = m_config.maxPacketSize < AppConfig::Mqtt::ClientPacketBufferSize
+                                         ? m_config.maxPacketSize
+                                         : AppConfig::Mqtt::ClientPacketBufferSize;
 
     if (remainingLength > packetLimit) {
         return false;
@@ -314,7 +318,7 @@ bool MqttClient::subscribe(const char* topic, uint8_t qos) {
     }
 
     const uint16_t packetId = nextPacketId();
-    size_t offset = 0;
+    size_t         offset   = 0;
 
     if (!writeUint16ToBuffer(m_packetBuffer, sizeof(m_packetBuffer), offset, packetId) ||
         !writeMqttStringToBuffer(m_packetBuffer, sizeof(m_packetBuffer), offset, topic)) {
@@ -484,7 +488,7 @@ bool MqttClient::readPacket(MqttPacket& packet, uint32_t timeoutMs) {
         return false;
     }
 
-    packet.header.type = decodeType(firstByte >> 4);
+    packet.header.type  = decodeType(firstByte >> 4);
     packet.header.flags = firstByte & 0x0F;
 
     if (!readRemainingLength(m_tcp, packet.header.remainingLength, timeoutMs)) {
@@ -527,10 +531,10 @@ bool MqttClient::parsePacketBody(MqttPacket& packet, const uint8_t* data, size_t
 }
 
 bool MqttClient::parsePublish(MqttPacket& packet, const uint8_t* data, size_t len) {
-    size_t offset = 0;
-    packet.bodyKind = MqttPacket::BodyKind::Publish;
-    packet.publish.dup = (packet.header.flags & 0x08) != 0;
-    packet.publish.qos = (packet.header.flags & 0x06) >> 1;
+    size_t offset         = 0;
+    packet.bodyKind       = MqttPacket::BodyKind::Publish;
+    packet.publish.dup    = (packet.header.flags & 0x08) != 0;
+    packet.publish.qos    = (packet.header.flags & 0x06) >> 1;
     packet.publish.retain = (packet.header.flags & 0x01) != 0;
 
     if (packet.publish.qos > 1) {
@@ -545,7 +549,7 @@ bool MqttClient::parsePublish(MqttPacket& packet, const uint8_t* data, size_t le
         return false;
     }
 
-    packet.publish.payload = data + offset;
+    packet.publish.payload    = data + offset;
     packet.publish.payloadLen = len - offset;
     return true;
 }
@@ -555,20 +559,20 @@ bool MqttClient::parseConnAck(MqttPacket& packet, const uint8_t* data, size_t le
         return false;
     }
 
-    packet.bodyKind = MqttPacket::BodyKind::ConnAck;
+    packet.bodyKind               = MqttPacket::BodyKind::ConnAck;
     packet.connAck.sessionPresent = (data[0] & 0x01) != 0;
-    packet.connAck.returnCode = data[1];
+    packet.connAck.returnCode     = data[1];
     return true;
 }
 
 bool MqttClient::parseSubAck(MqttPacket& packet, const uint8_t* data, size_t len) {
-    size_t offset = 0;
+    size_t offset   = 0;
     packet.bodyKind = MqttPacket::BodyKind::SubAck;
     return readUint16(data, len, offset, packet.subAck.packetId) && offset < len;
 }
 
 bool MqttClient::parsePubAck(MqttPacket& packet, const uint8_t* data, size_t len) {
-    size_t offset = 0;
+    size_t offset   = 0;
     packet.bodyKind = MqttPacket::BodyKind::PubAck;
     return readUint16(data, len, offset, packet.pubAck.packetId) && offset == len;
 }
@@ -580,8 +584,8 @@ void MqttClient::handlePacket(const MqttPacket& packet) {
                 sendPubAck(packet.publish.packetId);
             }
 
-            emitEvent({.type = EventType::PublishReceived,
-                       .topic = packet.publish.topic,
+            emitEvent({.type       = EventType::PublishReceived,
+                       .topic      = packet.publish.topic,
                        .payloadLen = packet.publish.payloadLen});
 
             if (m_handler) {
@@ -638,9 +642,11 @@ void MqttClient::emitEvent(Event event) {
         return;
     }
 
-    event.host = m_config.host != nullptr ? m_config.host : "";
-    event.port = m_config.port;
+    event.host     = m_config.host != nullptr ? m_config.host : "";
+    event.port     = m_config.port;
     event.clientId = m_config.clientId != nullptr ? m_config.clientId : "";
 
     m_eventHandler(event);
 }
+
+#endif

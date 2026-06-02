@@ -12,7 +12,7 @@
 #undef Serial
 #endif
 
-namespace OledDisplayApp
+namespace SSD1306OledDisplayApp
 {
     namespace Detail
     {
@@ -30,7 +30,8 @@ namespace OledDisplayApp
 
             dvc::Serial          serial {AppConfig::Hardware::SerialBaudrate};
             SerialConsoleService console {serial};
-            SSD1306              oled {IIC::DefaultSdaPin, IIC::DefaultSclPin};
+            IIC                  iic {IIC::DefaultSdaPin, IIC::DefaultSclPin};
+            SSD1306              oled {iic};
         };
 
         inline Context& context() {
@@ -45,20 +46,26 @@ namespace OledDisplayApp
         app.console.setup();
         app.console.printBootBanner(app.nodeInfo);
 
-        if (!app.oled.begin()) {
+        if (!app.iic.setup()) {
+            app.nodeInfo.updateNodeState(ERROR);
+            app.console.error("failed to initialize IIC bus");
+            return;
+        }
+
+        if (!app.oled.setup()) {
             app.nodeInfo.updateNodeState(ERROR);
             app.console.error("failed to initialize OLED display");
             return;
         }
 
         if (!app.oled.displayText("1234567890123", SSD1306::TextStyle {
-                                                      0,
-                                                      0,
-                                                      2,
-                                                      SSD1306::Color::WHITE,
-                                                      SSD1306::Color::BLACK,
-                                                      false,
-                                                  }) ||
+                                                       0,
+                                                       0,
+                                                       2,
+                                                       SSD1306::Color::WHITE,
+                                                       SSD1306::Color::BLACK,
+                                                       false,
+                                                   }) ||
             !app.oled.displayText("PRTNS", SSD1306::TextStyle {
                                                0,
                                                16,

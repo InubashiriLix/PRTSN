@@ -64,28 +64,28 @@ struct EspNowProtocol
         INVALID_CRC,
     };
 
-    static constexpr uint16_t Magic = 0x5054; // 'P''T'
-    static constexpr uint8_t  HeaderLen = 12;
-    static constexpr uint8_t  CrcLen = 2;
-    static constexpr uint16_t MaxPacketLen = 250;
+    static constexpr uint16_t Magic         = 0x5054; // 'P''T'
+    static constexpr uint8_t  HeaderLen     = 12;
+    static constexpr uint8_t  CrcLen        = 2;
+    static constexpr uint16_t MaxPacketLen  = 250;
     static constexpr uint16_t MaxPayloadLen = MaxPacketLen - HeaderLen - CrcLen;
 
     struct Header
     {
-        uint16_t magic = Magic;
-        Version  version = Version::V1;
-        uint8_t  headerLen = HeaderLen;
-        Type     type = Type::DATA;
-        uint8_t  flags = FLAG_NONE;
-        uint16_t seq = 0;
-        uint16_t ackSeq = 0;
+        uint16_t magic      = Magic;
+        Version  version    = Version::V1;
+        uint8_t  headerLen  = HeaderLen;
+        Type     type       = Type::DATA;
+        uint8_t  flags      = FLAG_NONE;
+        uint16_t seq        = 0;
+        uint16_t ackSeq     = 0;
         uint16_t payloadLen = 0;
     };
 
     struct Packet
     {
         Header         header;
-        const uint8_t* payload = nullptr;
+        const uint8_t* payload    = nullptr;
         size_t         payloadLen = 0;
     };
 
@@ -102,11 +102,11 @@ struct EspNowProtocol
                          size_t&        outLen,
                          Type           type,
                          uint16_t       seq,
-                         const uint8_t* payload = nullptr,
+                         const uint8_t* payload    = nullptr,
                          size_t         payloadLen = 0,
-                         uint8_t        flags = FLAG_NONE,
-                         uint16_t       ackSeq = 0,
-                         Version        version = Version::V1) {
+                         uint8_t        flags      = FLAG_NONE,
+                         uint16_t       ackSeq     = 0,
+                         Version        version    = Version::V1) {
         if (out == nullptr) {
             return Result::INVALID_ARGUMENT;
         }
@@ -191,8 +191,7 @@ struct EspNowProtocol
 
 private:
     static uint16_t readU16(const uint8_t* data, size_t offset) {
-        return static_cast<uint16_t>(data[offset])
-             | static_cast<uint16_t>(data[offset + 1] << 8);
+        return static_cast<uint16_t>(data[offset]) | static_cast<uint16_t>(data[offset + 1] << 8);
     }
 
     static void writeU16(uint8_t* data, size_t offset, uint16_t value) {
