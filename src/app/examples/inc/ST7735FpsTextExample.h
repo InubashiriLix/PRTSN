@@ -30,8 +30,9 @@ namespace ST7735FpsTextExample
         constexpr uint32_t SpiClockHz     = 20 * 1000 * 1000;
         constexpr size_t   DeviceIndex    = 0;
         constexpr size_t   DmaBufferBytes = 3200;
-        constexpr uint16_t Width          = ST7735::DefaultWidth;
-        constexpr uint16_t Height         = ST7735::DefaultHeight;
+        constexpr auto     LcdOrientation = ST7735::Orientation::Landscape;
+        constexpr uint16_t Width          = ST7735::LandscapeWidth;
+        constexpr uint16_t Height         = ST7735::LandscapeHeight;
 
         constexpr uint32_t    LogPeriodMs    = 1000;
         constexpr uint32_t    TaskStackBytes = 8192;
@@ -62,20 +63,16 @@ namespace ST7735FpsTextExample
         }
 
         inline ST7735::Config makeLcdConfig() {
-            ST7735::Config config {};
-            config.width           = Width;
-            config.height          = Height;
-            config.dmaBufferBytes  = DmaBufferBytes;
-            config.columnOffset    = 26;
-            config.rowOffset       = 1;
-            config.resetPin        = static_cast<gpio_num_t>(ResetPin);
-            config.dcPin           = static_cast<gpio_num_t>(DcPin);
-            config.backlightPin    = static_cast<gpio_num_t>(BacklightPin);
-            config.useResetPin     = true;
-            config.useBacklightPin = true;
-            config.autoDmaBuffer   = true;
-            config.invertColors    = true;
-            config.madctl          = 0xC8;
+            ST7735::Config config       = ST7735::makeConfig(LcdOrientation);
+            config.dmaBufferBytes       = DmaBufferBytes;
+            config.resetPin             = static_cast<gpio_num_t>(ResetPin);
+            config.dcPin                = static_cast<gpio_num_t>(DcPin);
+            config.backlightPin         = static_cast<gpio_num_t>(BacklightPin);
+            config.useResetPin          = true;
+            config.useBacklightPin      = true;
+            config.autoDmaBuffer        = true;
+            config.useOrientationPreset = true;
+            config.invertColors         = true;
             return config;
         }
 
@@ -167,8 +164,8 @@ namespace ST7735FpsTextExample
             }
 
             for (uint8_t i = 0; i < 8; ++i) {
-                const uint16_t y     = static_cast<uint16_t>(20 + i * 14);
-                const uint16_t width = static_cast<uint16_t>(12 + wave(frame + i * 9, 70, 50));
+                const uint16_t y     = static_cast<uint16_t>(24 + i * 6);
+                const uint16_t width = static_cast<uint16_t>(20 + wave(frame + i * 9, 70, 120));
                 if (!ST7735::fillFrameRect(app.frameBuffer, 0, y, width, 5, wheel(static_cast<uint8_t>(frame * 3 + i * 24)))) {
                     app.console.error("ST7735 fillFrameRect/bar failed");
                     return false;
@@ -176,7 +173,7 @@ namespace ST7735FpsTextExample
             }
 
             const uint16_t boxX = wave(frame, 64, Width - 18);
-            const uint16_t boxY = static_cast<uint16_t>(66 + wave(frame + 17, 50, 44));
+            const uint16_t boxY = static_cast<uint16_t>(42 + wave(frame + 17, 50, 20));
             if (!ST7735::fillFrameRect(app.frameBuffer, boxX, boxY, 18, 18, wheel(static_cast<uint8_t>(frame * 5)))) {
                 app.console.error("ST7735 fillFrameRect/box failed");
                 return false;
@@ -198,7 +195,7 @@ namespace ST7735FpsTextExample
 
             if (!ST7735::drawFrameText(app.frameBuffer, "ANIM + FONT", ST7735::TextStyle {
                                                                            .x           = 2,
-                                                                           .y           = 146,
+                                                                           .y           = 68,
                                                                            .scale       = 1,
                                                                            .color       = ST7735::WHITE,
                                                                            .transparent = true,
@@ -298,7 +295,8 @@ namespace ST7735FpsTextExample
                          Detail::DcPin,
                          Detail::BacklightPin,
                          static_cast<unsigned long>(Detail::SpiClockHz));
-        app.console.info("ST7735 FPS test: size=%ux%u dma=%u text=5x7",
+        app.console.info("ST7735 FPS test: orientation=%s size=%ux%u dma=%u text=5x7",
+                         ST7735::orientationName(Detail::LcdOrientation),
                          static_cast<unsigned>(Detail::Width),
                          static_cast<unsigned>(Detail::Height),
                          static_cast<unsigned>(Detail::DmaBufferBytes));

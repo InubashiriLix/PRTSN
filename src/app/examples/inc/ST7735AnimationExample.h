@@ -30,6 +30,7 @@ namespace ST7735AnimationExample
         constexpr uint32_t SpiClockHz     = 20 * 1000 * 1000;
         constexpr size_t   DeviceIndex    = 0;
         constexpr size_t   DmaBufferBytes = 3200;
+        constexpr auto     LcdOrientation = ST7735::Orientation::Portrait;
 
         constexpr uint32_t    LogPeriodMs    = 1000;
         constexpr uint32_t    TaskStackBytes = 8192;
@@ -60,18 +61,16 @@ namespace ST7735AnimationExample
         }
 
         inline ST7735::Config makeLcdConfig() {
-            ST7735::Config config {};
-            config.width           = LcdAnimation::Width;
-            config.height          = LcdAnimation::Height;
-            config.columnOffset    = 26;
-            config.rowOffset       = 1;
-            config.resetPin        = static_cast<gpio_num_t>(ResetPin);
-            config.dcPin           = static_cast<gpio_num_t>(DcPin);
-            config.backlightPin    = static_cast<gpio_num_t>(BacklightPin);
-            config.useResetPin     = true;
-            config.useBacklightPin = true;
-            config.invertColors    = true;
-            config.madctl          = 0xC8;
+            ST7735::Config config       = ST7735::makeConfig(LcdOrientation);
+            config.dmaBufferBytes       = DmaBufferBytes;
+            config.resetPin             = static_cast<gpio_num_t>(ResetPin);
+            config.dcPin                = static_cast<gpio_num_t>(DcPin);
+            config.backlightPin         = static_cast<gpio_num_t>(BacklightPin);
+            config.useResetPin          = true;
+            config.useBacklightPin      = true;
+            config.autoDmaBuffer        = true;
+            config.useOrientationPreset = true;
+            config.invertColors         = true;
             return config;
         }
 
@@ -296,7 +295,8 @@ namespace ST7735AnimationExample
                          Detail::DcPin,
                          Detail::BacklightPin,
                          static_cast<unsigned long>(Detail::SpiClockHz));
-        app.console.info("ST7735 GIF: size=%ux%u frames=%u fps=%u frameBytes=%u",
+        app.console.info("ST7735 GIF: orientation=%s size=%ux%u frames=%u fps=%u frameBytes=%u",
+                         ST7735::orientationName(Detail::LcdOrientation),
                          static_cast<unsigned>(app.animation.width),
                          static_cast<unsigned>(app.animation.height),
                          static_cast<unsigned>(app.animation.frameCount),

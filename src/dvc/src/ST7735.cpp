@@ -116,7 +116,11 @@ ST7735::ST7735(SPI& spi, size_t deviceIndex) : ST7735(spi, deviceIndex, Config {
 ST7735::ST7735(SPI& spi, size_t deviceIndex, Config config)
     : m_spi(spi),
       m_deviceIndex(deviceIndex),
-      m_config(config) {}
+      m_config(config) {
+    if (m_config.useOrientationPreset) {
+        applyOrientation(m_config, m_config.orientation);
+    }
+}
 
 ST7735::~ST7735() {
     releaseDmaBuffer();
@@ -125,6 +129,10 @@ ST7735::~ST7735() {
 ST7735::Error ST7735::setup() {
     if (m_started) {
         return makeError(StdError::INVALID_STATE, Detail::ALREADY_STARTED, ESP_ERR_INVALID_STATE);
+    }
+
+    if (m_config.useOrientationPreset) {
+        applyOrientation(m_config, m_config.orientation);
     }
 
     if (m_config.autoDmaBuffer && m_dmaBuffer == nullptr) {
@@ -254,6 +262,16 @@ ST7735::Error ST7735::setup() {
     }
 
     return clearError();
+}
+
+ST7735::Error ST7735::setOrientation(Orientation orientation) {
+    applyOrientation(m_config, orientation);
+
+    if (!m_started) {
+        return clearError();
+    }
+
+    return writeCommandData(CmdMadCtl, &m_config.madctl, 1);
 }
 
 void ST7735::releaseDmaBuffer() {
@@ -755,6 +773,50 @@ bool ST7735::drawFrameText(FrameBuffer& frame, const char* text, const TextStyle
     return true;
 }
 
+ST7735::Config ST7735::makeConfig(Orientation orientation) {
+    Config config {};
+    applyOrientation(config, orientation);
+    return config;
+}
+
+void ST7735::applyOrientation(Config& config, Orientation orientation) {
+    config.orientation = orientation;
+
+    switch (orientation) {
+        case Orientation::Portrait:
+            config.width        = DefaultWidth;
+            config.height       = DefaultHeight;
+            config.columnOffset = 26;
+            config.rowOffset    = 1;
+            config.madctl       = 0xC8;
+            return;
+
+        case Orientation::Landscape:
+            config.width        = LandscapeWidth;
+            config.height       = LandscapeHeight;
+            config.columnOffset = 1;
+            config.rowOffset    = 26;
+            config.madctl       = 0xA8;
+            return;
+
+        case Orientation::PortraitInverted:
+            config.width        = DefaultWidth;
+            config.height       = DefaultHeight;
+            config.columnOffset = 26;
+            config.rowOffset    = 1;
+            config.madctl       = 0x08;
+            return;
+
+        case Orientation::LandscapeInverted:
+            config.width        = LandscapeWidth;
+            config.height       = LandscapeHeight;
+            config.columnOffset = 1;
+            config.rowOffset    = 26;
+            config.madctl       = 0x68;
+            return;
+    }
+}
+
 ST7735::TextBounds ST7735::measureText(const char* text, uint8_t scale) {
     if (text == nullptr || scale == 0) {
         return {};
@@ -813,6 +875,21 @@ const char* ST7735::detailName(Detail detail) noexcept {
     }
 
     return "UNKNOWN";
+}
+
+const char* ST7735::orientationName(Orientation orientation) noexcept {
+    switch (orientation) {
+        case Orientation::Portrait:
+            return "Portrait";
+        case Orientation::Landscape:
+            return "Landscape";
+        case Orientation::PortraitInverted:
+            return "PortraitInverted";
+        case Orientation::LandscapeInverted:
+            return "LandscapeInverted";
+    }
+
+    return "Unknown";
 }
 
 ST7735::Error ST7735::configurePins() {

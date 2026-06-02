@@ -10,8 +10,10 @@
 class ST7735
 {
 public:
-    static constexpr uint16_t DefaultWidth  = 80;
-    static constexpr uint16_t DefaultHeight = 160;
+    static constexpr uint16_t DefaultWidth    = 80;
+    static constexpr uint16_t DefaultHeight   = 160;
+    static constexpr uint16_t LandscapeWidth  = DefaultHeight;
+    static constexpr uint16_t LandscapeHeight = DefaultWidth;
 
     static constexpr uint16_t BLACK   = 0x0000;
     static constexpr uint16_t BLUE    = 0x001F;
@@ -22,21 +24,31 @@ public:
     static constexpr uint16_t YELLOW  = 0xFFE0;
     static constexpr uint16_t WHITE   = 0xFFFF;
 
+    enum class Orientation : uint8_t
+    {
+        Portrait = 0,
+        Landscape,
+        PortraitInverted,
+        LandscapeInverted,
+    };
+
     struct Config
     {
-        uint16_t   width           = DefaultWidth;
-        uint16_t   height          = DefaultHeight;
-        size_t     dmaBufferBytes  = 3200;
-        uint8_t    columnOffset    = 26;
-        uint8_t    rowOffset       = 1;
-        gpio_num_t resetPin        = GPIO_NUM_1;
-        gpio_num_t dcPin           = GPIO_NUM_0;
-        gpio_num_t backlightPin    = GPIO_NUM_10;
-        bool       useResetPin     = true;
-        bool       useBacklightPin = true;
-        bool       autoDmaBuffer   = true;
-        bool       invertColors    = true;
-        uint8_t    madctl          = 0xC8;
+        uint16_t    width                = DefaultWidth;
+        uint16_t    height               = DefaultHeight;
+        size_t      dmaBufferBytes       = 3200;
+        uint8_t     columnOffset         = 26;
+        uint8_t     rowOffset            = 1;
+        Orientation orientation          = Orientation::Portrait;
+        gpio_num_t  resetPin             = GPIO_NUM_1;
+        gpio_num_t  dcPin                = GPIO_NUM_0;
+        gpio_num_t  backlightPin         = GPIO_NUM_10;
+        bool        useResetPin          = true;
+        bool        useBacklightPin      = true;
+        bool        autoDmaBuffer        = true;
+        bool        useOrientationPreset = true;
+        bool        invertColors         = true;
+        uint8_t     madctl               = 0xC8;
     };
 
     struct TextStyle
@@ -123,6 +135,7 @@ public:
     ST7735& operator=(const ST7735&) = delete;
 
     [[nodiscard]] Error setup();
+    [[nodiscard]] Error setOrientation(Orientation orientation);
     void                releaseDmaBuffer();
     [[nodiscard]] Error allocateDmaBuffer(size_t bytes);
     [[nodiscard]] Error setDmaBuffer(uint8_t* buffer, size_t bytes);
@@ -176,8 +189,11 @@ public:
     static bool        fillFrameRect(FrameBuffer& frame, uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color);
     static bool        drawFrameChar(FrameBuffer& frame, char value, const TextStyle& style);
     static bool        drawFrameText(FrameBuffer& frame, const char* text, const TextStyle& style);
+    static Config      makeConfig(Orientation orientation);
+    static void        applyOrientation(Config& config, Orientation orientation);
     static TextBounds  measureText(const char* text, uint8_t scale = 1);
     static const char* detailName(Detail detail) noexcept;
+    static const char* orientationName(Orientation orientation) noexcept;
 
 private:
     static constexpr uint8_t  CmdSwReset = 0x01;
