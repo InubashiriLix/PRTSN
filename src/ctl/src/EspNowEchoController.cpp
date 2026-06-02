@@ -1,3 +1,7 @@
+#include "src/cfg/BuildConfig.h"
+
+#if PRTN_ENABLE_WIFI
+
 #include "src/ctl/inc/EspNowEchoController.h"
 #include "src/cfg/ProfileConfig.h"
 
@@ -316,3 +320,5 @@ void EspNowEchoController::cmdEspNowHandler(SerialConsoleService&, const char* a
 
     controller->m_console.info("usage: espnow stats|node-id|node-name");
 }
+
+#endif

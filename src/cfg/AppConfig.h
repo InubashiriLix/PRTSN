@@ -3,13 +3,17 @@
 #include <cstddef>
 
 #include "src/cfg/BoardConfig.h"
+#include "src/cfg/BuildConfig.h"
 #include "src/cfg/ProfileConfig.h"
 #include "src/cfg/ProjectConfig.h"
-#include "src/ctl/inc/EspNowEchoController.h"
 #include "src/dvc/inc/LED.h"
 #include "src/dvc/inc/Serial.h"
+
+#if PRTN_ENABLE_WIFI
+#include "src/ctl/inc/EspNowEchoController.h"
 #include "src/svc/inc/EspNowNode.h"
 #include "src/svc/inc/wifi.h"
+#endif
 
 struct AppConfig
 {
@@ -52,6 +56,7 @@ struct AppConfig
         static constexpr uint32_t SerialBaudrate = dvc::Serial::DefaultBaudrate;
     };
 
+#if PRTN_ENABLE_WIFI
     struct Network
     {
         static constexpr Wifi::Mode  WifiMode       = Wifi::Mode::STA;
@@ -85,4 +90,5 @@ struct AppConfig
         static constexpr uint32_t AckTimeoutMs        = EspNowNode::DefaultAckTimeoutMs;
         static constexpr uint8_t  MaxRetries          = EspNowNode::DefaultMaxRetries;
     };
+#endif
 };

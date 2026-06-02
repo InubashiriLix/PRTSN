@@ -1,3 +1,7 @@
+#include "src/cfg/BuildConfig.h"
+
+#if PRTN_ENABLE_WIFI
+
 #include "../inc/MqttClient.h"
 
 #include <Arduino.h>
@@ -644,3 +648,5 @@ void MqttClient::emitEvent(Event event) {
 
     m_eventHandler(event);
 }
+
+#endif

@@ -1,3 +1,7 @@
+#include "src/cfg/BuildConfig.h"
+
+#if PRTN_ENABLE_WIFI
+
 #include "src/svc/inc/EspNowNode.h"
 
 #include <Arduino.h>
@@ -688,3 +692,5 @@ bool EspNowNode::isLocalNodeId(const char* nodeId) const {
 bool EspNowNode::sameMac(const uint8_t* lhs, const uint8_t* rhs) const {
     return lhs != nullptr && rhs != nullptr && std::memcmp(lhs, rhs, ESP_NOW_ETH_ALEN) == 0;
 }
+
+#endif

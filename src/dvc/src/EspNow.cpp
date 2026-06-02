@@ -1,3 +1,7 @@
+#include "src/cfg/BuildConfig.h"
+
+#if PRTN_ENABLE_WIFI
+
 #include "src/dvc/inc/EspNow.h"
 
 #include <cstring>
@@ -354,3 +358,5 @@ void EspNow::removePeerFromConfig(uint8_t peerIndex) {
 
     --m_config.peerCount;
 }
+
+#endif
