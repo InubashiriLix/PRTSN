@@ -4,6 +4,10 @@
 #include "driver/spi_master.h"
 #include "hal/spi_types.h"
 #include "src/fw/inc/std_err.h"
+
+#include <cstddef>
+#include <cstdint>
+
 class SPI
 {
 public:
@@ -28,14 +32,9 @@ public:
 
     struct DeviceConfig
     {
-        size_t                        index;
+        size_t                        index  = 0;
         spi_device_interface_config_t device = {};
         spi_device_handle_t           handle = nullptr;
-        // int      csPin;
-        // uint32_t clockHz;
-        // uint8_t  queueSize;
-        // uint8_t  addrBits;
-        // bool     csActiveHigh = false;
     };
 
     enum class Detail : uint8_t
@@ -52,13 +51,14 @@ public:
         READ_FAILED,
         WRITE_READ_FAILED,
         PROBE_FAILED,
+        DEVICE_REMOVE_FAILED,
     };
 
     struct Error
     {
-        StdError    code;
-        SPI::Detail detail;
-        esp_err_t   native;
+        StdError    code   = StdError::OK;
+        SPI::Detail detail = Detail::NONE;
+        esp_err_t   native = ESP_OK;
 
         constexpr bool ok() const noexcept {
             return code == StdError::OK && detail == Detail::NONE && native == ESP_OK;
@@ -71,36 +71,44 @@ public:
 
     struct Transaction
     {
-        const uint8_t* txData;
-        uint8_t*       rxData;
-        size_t         length;
+        const uint8_t* txData = nullptr;
+        uint8_t*       rxData = nullptr;
+        size_t         length = 0;
         bool           rxOnly = false;
     };
 
-    explicit SPI(BusConfig& busConfig);
+    SPI();
+    explicit SPI(BusConfig busConfig);
+    ~SPI();
 
-    const Error setupBus();
-    const Error end();
-    const Error addDevice(const DeviceConfig& config);
-    const Error removeDevice(size_t index);
-    const Error transmit(size_t dvcIndex, const Transaction& transaction);
+    Error setupBus();
+    Error end();
+    Error addDevice(const DeviceConfig& config);
+    Error removeDevice(size_t index);
+    Error transmit(size_t dvcIndex, const Transaction& transaction);
 
-    const Error write(size_t dvcIndex, const uint8_t* data, size_t len);
-    const Error read(size_t dvcIndex, uint8_t* buf, size_t len);
-    const Error writeRegister(size_t dvcIndex, uint8_t reg, uint8_t value);
-    const Error readRegister(size_t dvcIndex, uint8_t reg, uint8_t* buf, size_t len);
+    Error write(size_t dvcIndex, const uint8_t* data, size_t len);
+    Error read(size_t dvcIndex, uint8_t* buf, size_t len);
+    Error writeRegister(size_t dvcIndex, uint8_t reg, uint8_t value);
+    Error readRegister(size_t dvcIndex, uint8_t reg, uint8_t* buf, size_t len);
+
+    bool             started() const;
+    Error            lastError() const;
+    const BusConfig& config() const;
+
+    static const char* detailName(Detail detail) noexcept;
 
 private:
-    inline static Error checkDeviceIndex(size_t index) {
-        if (index >= DefaultMaxDeviceNum) {
-            return {.code = StdError::FAIL, .detail = Detail::PARAM_CONFIG_FAILED, .native = ESP_FAIL};
-        }
-        return {.code = StdError::OK, .detail = Detail::NONE, .native = ESP_OK};
-    }
-
-    BusConfig&   m_busConfig;
+    BusConfig    m_busConfig {};
     size_t       m_deviceCnt                    = 0;
     DeviceConfig m_devices[DefaultMaxDeviceNum] = {};
     bool         m_started                      = false;
     Error        m_lastError                    = {};
+
+private:
+    Error makeError(StdError code, Detail detail, esp_err_t native);
+    Error clearError();
+    Error ensureStarted();
+    bool  validDevice(size_t index) const;
+    bool  validBuffer(const uint8_t* data, size_t len) const;
 };
