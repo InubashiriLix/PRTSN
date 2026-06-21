@@ -1,31 +1,23 @@
-# PRTN board/build configuration.
+# PRTN project/build configuration.
 #
 # This file is tracked by git and should describe the default project setup.
 # Put machine-specific overrides such as PORT in config/local.mk.
 
-# Arduino board identity.
-BOARD_PACKAGE := esp32
-BOARD_ARCH    := esp32
-BOARD_ID      := AirM2M_CORE_ESP32C3
-
-# ESP32 Arduino board menu options.
+# Board configuration selected by the top-level Makefile.
 #
-# Use `arduino-cli board details -b esp32:esp32:AirM2M_CORE_ESP32C3`
-# to see all values supported by the installed ESP32 core.
-UPLOAD_SPEED     := 921600
-CDC_ON_BOOT      := default
-CPU_FREQ         := 160
-FLASH_FREQ       := 80
-PARTITION_SCHEME := no_ota
-DEBUG_LEVEL      := none
-ERASE_FLASH      := none
+# Board files live in config/boards/*.mk. Override this in config/local.mk
+# or on the command line, for example:
+#   make BOARD_CONFIG=ESP32S3_N16R8_DEV info
+BOARD_CONFIG ?= ESP32S3_N16R8_DEV
 
 # Project paths.
 SKETCH    := .
-BUILD_DIR := build
+BUILD_DIR ?= build/$(BOARD_CONFIG)
 
 # Serial monitor defaults.
-PORT ?= /dev/ttyACM0
+# ESP32-S3 boards using a USB-UART bridge commonly enumerate as /dev/ttyUSB*.
+# AirM2M ESP32-C3 boards may enumerate as /dev/ttyACM*.
+PORT ?= /dev/ttyUSB0
 BAUD ?= 115200
 
 # Optional compile-time defines passed to C and C++.

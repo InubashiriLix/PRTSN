@@ -1,9 +1,24 @@
 include config/project.mk
 -include config/local.mk
 
+override BOARD_CONFIG := $(strip $(BOARD_CONFIG))
+include config/boards/$(BOARD_CONFIG).mk
+
+override BOARD_PACKAGE      := $(strip $(BOARD_PACKAGE))
+override BOARD_ARCH         := $(strip $(BOARD_ARCH))
+override BOARD_ID           := $(strip $(BOARD_ID))
+override BOARD_SEARCH       := $(strip $(BOARD_SEARCH))
+override BOARD_FQBN_OPTIONS := $(strip $(BOARD_FQBN_OPTIONS))
+override SKETCH             := $(strip $(SKETCH))
+override BUILD_DIR          := $(strip $(BUILD_DIR))
+override COMPDB_BUILD_DIR   := $(strip $(or $(COMPDB_BUILD_DIR),$(BUILD_DIR)/compdb))
+override PORT               := $(strip $(PORT))
+override BAUD               := $(strip $(BAUD))
+override GDB_TARGET_ARCH    := $(strip $(GDB_TARGET_ARCH))
+override OPENOCD_BOARD_CFG  := $(strip $(OPENOCD_BOARD_CFG))
+
 BASE_FQBN := $(BOARD_PACKAGE):$(BOARD_ARCH):$(BOARD_ID)
-FQBN_OPTIONS := UploadSpeed=$(UPLOAD_SPEED),CDCOnBoot=$(CDC_ON_BOOT),CPUFreq=$(CPU_FREQ),FlashFreq=$(FLASH_FREQ),PartitionScheme=$(PARTITION_SCHEME),DebugLevel=$(DEBUG_LEVEL),EraseFlash=$(ERASE_FLASH)
-FQBN := $(BASE_FQBN):$(FQBN_OPTIONS)
+FQBN := $(BASE_FQBN)$(if $(BOARD_FQBN_OPTIONS),:$(BOARD_FQBN_OPTIONS))
 
 BUILD_FLAGS = $(strip $(BUILD_DEFINES) $(BUILD_OPT_FLAGS))
 BUILD_PROPERTIES = $(if $(BUILD_FLAGS),--build-property compiler.c.extra_flags="$(BUILD_FLAGS)" --build-property compiler.cpp.extra_flags="$(BUILD_FLAGS)")
@@ -23,9 +38,9 @@ ESP32_TOOLS := $(HOME)/.arduino15/packages/esp32/tools
 OPENOCD_ROOT := $(lastword $(sort $(wildcard $(ESP32_TOOLS)/openocd-esp32/*)))
 OPENOCD_BIN := $(OPENOCD_ROOT)/bin/openocd
 OPENOCD_SCRIPTS := $(OPENOCD_ROOT)/share/openocd/scripts
-OPENOCD_BOARD_CFG ?= board/esp32c3-builtin.cfg
-GDB_ROOT := $(lastword $(sort $(wildcard $(ESP32_TOOLS)/riscv32-esp-elf-gdb/*)))
-GDB_BIN := $(GDB_ROOT)/bin/riscv32-esp-elf-gdb
+GDB_TARGET_ARCH ?= riscv32-esp-elf
+GDB_ROOT := $(lastword $(sort $(wildcard $(ESP32_TOOLS)/$(GDB_TARGET_ARCH)-gdb/*)))
+GDB_BIN := $(GDB_ROOT)/bin/$(GDB_TARGET_ARCH)-gdb
 DEBUG_ELF := $(BUILD_DIR)/PRTN.ino.elf
 DEBUG_GDB_PORT ?= 3333
 
@@ -63,8 +78,8 @@ endef
 
 help:
 	@printf "\n$(BOLD)PRTN$(RESET) - PRTS Node / PRTS 节点\n"
-	@printf "$(DIM)Minimal layered Arduino CLI project for AirM2M CORE ESP32-C3.$(RESET)\n"
-	@printf "$(DIM)适用于 AirM2M CORE ESP32-C3 的极简分层 Arduino CLI 项目。$(RESET)\n\n"
+	@printf "$(DIM)Minimal layered Arduino CLI project for $(BOARD_NAME).$(RESET)\n"
+	@printf "$(DIM)适用于 $(BOARD_NAME) 的极简分层 Arduino CLI 项目。$(RESET)\n\n"
 
 	@printf "$(BOLD)Targets / 可用命令$(RESET)\n"
 	@printf "  $(CYAN)make check$(RESET)        Check toolchain, ESP32 core, board and port\n"
@@ -75,8 +90,8 @@ help:
 	@printf "                    编译固件\n"
 	@printf "  $(CYAN)make debug-build$(RESET)  Compile firmware with debug-friendly flags\n"
 	@printf "                    使用适合单步调试的参数编译固件\n"
-	@printf "  $(CYAN)make debug-server$(RESET) Start ESP32-C3 USB JTAG OpenOCD server\n"
-	@printf "                    启动 ESP32-C3 USB JTAG OpenOCD 调试服务器\n"
+	@printf "  $(CYAN)make debug-server$(RESET) Start $(BOARD_NAME) OpenOCD server\n"
+	@printf "                    启动 $(BOARD_NAME) OpenOCD 调试服务器\n"
 	@printf "  $(CYAN)make debug-gdb$(RESET)    Connect terminal GDB to OpenOCD\n"
 	@printf "                    使用终端 GDB 连接 OpenOCD\n"
 	@printf "  $(CYAN)make upload$(RESET)       Upload firmware to $(BOLD)$(PORT)$(RESET)\n"
@@ -109,7 +124,7 @@ help:
 
 	@printf "$(BOLD)Config / 当前配置$(RESET)\n"
 	@printf "  FQBN      = $(FQBN)\n"
-	@printf "  Config    = config/project.mk + optional config/local.mk\n"
+	@printf "  Config    = config/project.mk + config/boards/$(BOARD_CONFIG).mk + optional config/local.mk\n"
 	@printf "  PORT      = $(PORT)\n"
 	@printf "  BAUD      = $(BAUD)\n"
 	@printf "  SKETCH    = $(SKETCH)\n"
@@ -128,12 +143,15 @@ help:
 info:
 	$(call section,Project configuration / 项目配置)
 	@printf "Project / 项目      : $(BOLD)PRTN$(RESET) / PRTS Node\n"
-	@printf "Board   / 板卡      : $(BOLD)AirM2M CORE ESP32-C3$(RESET)\n"
+	@printf "Board   / 板卡      : $(BOLD)$(BOARD_NAME)$(RESET)\n"
+	@printf "Board config        : $(BOARD_CONFIG)\n"
 	@printf "Base FQBN          : $(BASE_FQBN)\n"
 	@printf "Full FQBN          : $(FQBN)\n"
 	@printf "Partition / 分区   : $(PARTITION_SCHEME)\n"
 	@printf "CPU freq / 主频    : $(CPU_FREQ) MHz\n"
-	@printf "Flash freq         : $(FLASH_FREQ) MHz\n"
+	@printf "Flash mode/freq    : $(if $(FLASH_MODE),$(FLASH_MODE),<board default>) / $(if $(FLASH_FREQ),$(FLASH_FREQ) MHz,<board default>)\n"
+	@printf "Flash size         : $(if $(FLASH_SIZE),$(FLASH_SIZE),<board default>)\n"
+	@printf "PSRAM              : $(if $(PSRAM),$(PSRAM),<board default>)\n"
 	@printf "USB CDC on boot    : $(CDC_ON_BOOT)\n"
 	@printf "Upload speed       : $(UPLOAD_SPEED)\n"
 	@printf "Debug level        : $(DEBUG_LEVEL)\n"
@@ -193,7 +211,7 @@ check:
 	$(call section,Checking board FQBN / 检查板卡 FQBN)
 	@arduino-cli board listall | grep -q "$(BASE_FQBN)" || { \
 		printf "$(RED)✗ Board not found / 未找到板卡: $(BASE_FQBN)$(RESET)\n"; \
-		printf "Try / 尝试:\n  arduino-cli board listall | grep -i AirM2M\n"; \
+		printf "Try / 尝试:\n  arduino-cli board listall | grep -i $(BOARD_SEARCH)\n"; \
 		exit 1; \
 	}
 	$(call ok,board available / 板卡可用: $(BASE_FQBN))
@@ -209,13 +227,15 @@ check:
 
 compdb:
 	$(call section,Generating compile_commands.json / 生成 clangd 编译数据库)
-	$(call cmd,arduino-cli compile --fqbn $(FQBN) $(BUILD_PROPERTIES) --only-compilation-database --build-path $(BUILD_DIR) $(SKETCH))
-	@arduino-cli compile --fqbn $(FQBN) $(BUILD_PROPERTIES) --only-compilation-database --build-path $(BUILD_DIR) $(SKETCH)
-	@if [ -f "$(BUILD_DIR)/compile_commands.json" ]; then \
-		cp "$(BUILD_DIR)/compile_commands.json" ./compile_commands.json; \
+	$(call cmd,rm -rf $(COMPDB_BUILD_DIR))
+	@rm -rf "$(COMPDB_BUILD_DIR)"
+	$(call cmd,arduino-cli compile --fqbn $(FQBN) $(BUILD_PROPERTIES) --only-compilation-database --build-path $(COMPDB_BUILD_DIR) $(SKETCH))
+	@arduino-cli compile --fqbn $(FQBN) $(BUILD_PROPERTIES) --only-compilation-database --build-path $(COMPDB_BUILD_DIR) $(SKETCH)
+	@if [ -f "$(COMPDB_BUILD_DIR)/compile_commands.json" ]; then \
+		cp "$(COMPDB_BUILD_DIR)/compile_commands.json" ./compile_commands.json; \
 		printf "$(GREEN)✓$(RESET) compile_commands.json generated / 编译数据库已生成\n"; \
 	else \
-		printf "$(RED)✗ compile_commands.json not found in $(BUILD_DIR)$(RESET)\n"; \
+		printf "$(RED)✗ compile_commands.json not found in $(COMPDB_BUILD_DIR)$(RESET)\n"; \
 		exit 1; \
 	fi
 	@printf "$(DIM)Tip / 提示: run :LspRestart clangd in Neovim / 在 Neovim 中运行 :LspRestart clangd$(RESET)\n"
@@ -230,7 +250,7 @@ debug-build: BUILD_OPT_FLAGS := -Og -g3
 debug-build: build
 
 debug-server:
-	$(call section,Starting ESP32-C3 OpenOCD server / 启动 ESP32-C3 OpenOCD 调试服务器)
+	$(call section,Starting $(BOARD_NAME) OpenOCD server / 启动 $(BOARD_NAME) OpenOCD 调试服务器)
 	@if [ ! -x "$(OPENOCD_BIN)" ]; then \
 		printf "$(RED)✗ OpenOCD not found / 未找到 OpenOCD: $(OPENOCD_BIN)$(RESET)\n"; \
 		printf "Run / 运行:\n  arduino-cli core install esp32:esp32\n"; \
@@ -242,7 +262,7 @@ debug-server:
 debug-gdb:
 	$(call section,Connecting GDB to OpenOCD / 使用 GDB 连接 OpenOCD)
 	@if [ ! -x "$(GDB_BIN)" ]; then \
-		printf "$(RED)✗ riscv32-esp-elf-gdb not found / 未找到 riscv32-esp-elf-gdb: $(GDB_BIN)$(RESET)\n"; \
+		printf "$(RED)✗ $(GDB_TARGET_ARCH)-gdb not found / 未找到 $(GDB_TARGET_ARCH)-gdb: $(GDB_BIN)$(RESET)\n"; \
 		printf "Run / 运行:\n  arduino-cli core install esp32:esp32\n"; \
 		exit 1; \
 	fi

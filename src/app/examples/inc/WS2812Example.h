@@ -19,7 +19,18 @@ namespace WS2812Example
 {
     namespace Detail
     {
-        constexpr gpio_num_t  LedPin         = GPIO_NUM_7;
+        struct Ws2812DataOwner;
+
+        constexpr auto LedPin = PRTN_REG_PIN__(
+            Ws2812DataOwner,
+            ::prtn::b::rmt::tx0);
+
+        constexpr auto PinClaims = std::array {
+            PRTN_PIN_CLAIM__(LedPin, ::prtn::pin::PinUse::Exclusive, "RmtTx"),
+        };
+
+        static_assert(::prtn::pin::validatePinClaims(PinClaims), "WS2812Example has conflicting pin claims");
+
         constexpr size_t      LedCount       = 8;
         constexpr uint8_t     Brightness     = 32;
         constexpr TickType_t  TaskPeriod     = pdMS_TO_TICKS(10);
@@ -48,7 +59,7 @@ namespace WS2812Example
 
             dvc::Serial          serial {AppConfig::Hardware::SerialBaudrate};
             SerialConsoleService console {serial};
-            WS2812               led {LedPin, makeConfig()};
+            WS2812               led {LedPin.gpioNum(), makeConfig()};
 
             TaskHandle_t taskHandle = nullptr;
             uint32_t     frame      = 0;
@@ -165,7 +176,7 @@ namespace WS2812Example
         app.console.setup();
         app.console.printBootBanner(app.nodeInfo);
         app.console.info("WS2812 color flow: pin=%d count=%u brightness=%u order=%s",
-                         static_cast<int>(Detail::LedPin),
+                         Detail::LedPin.number(),
                          static_cast<unsigned>(Detail::LedCount),
                          static_cast<unsigned>(Detail::Brightness),
                          WS2812::colorOrderName(WS2812::ColorOrder::GRB));

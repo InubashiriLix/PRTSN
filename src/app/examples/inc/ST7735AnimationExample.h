@@ -21,12 +21,43 @@ namespace ST7735AnimationExample
 {
     namespace Detail
     {
-        constexpr int      ResetPin       = 1;
-        constexpr int      SckPin         = 2;
-        constexpr int      MosiPin        = 3;
-        constexpr int      CsPin          = 7;
-        constexpr int      DcPin          = 0;
-        constexpr int      BacklightPin   = 10;
+        struct St7735ResetOwner;
+        struct St7735SckOwner;
+        struct St7735MosiOwner;
+        struct St7735CsOwner;
+        struct St7735DcOwner;
+        struct St7735BacklightOwner;
+
+        constexpr auto ResetPin = PRTN_REG_PIN__(
+            St7735ResetOwner,
+            ::prtn::b::gpio::gpio1);
+        constexpr auto SckPin = PRTN_REG_PIN__(
+            St7735SckOwner,
+            ::prtn::b::spi::sck);
+        constexpr auto MosiPin = PRTN_REG_PIN__(
+            St7735MosiOwner,
+            ::prtn::b::spi::mosi);
+        constexpr auto CsPin = PRTN_REG_PIN__(
+            St7735CsOwner,
+            ::prtn::b::spi::cs);
+        constexpr auto DcPin = PRTN_REG_PIN__(
+            St7735DcOwner,
+            ::prtn::b::gpio::gpio0);
+        constexpr auto BacklightPin = PRTN_REG_PIN__(
+            St7735BacklightOwner,
+            ::prtn::b::gpio::gpio10);
+
+        constexpr auto PinClaims = std::array {
+            PRTN_PIN_CLAIM__(ResetPin, ::prtn::pin::PinUse::Exclusive, "DigitalOut"),
+            PRTN_PIN_CLAIM__(SckPin, ::prtn::pin::PinUse::Exclusive, "SpiSck"),
+            PRTN_PIN_CLAIM__(MosiPin, ::prtn::pin::PinUse::Exclusive, "SpiMosi"),
+            PRTN_PIN_CLAIM__(CsPin, ::prtn::pin::PinUse::Exclusive, "SpiCs"),
+            PRTN_PIN_CLAIM__(DcPin, ::prtn::pin::PinUse::Exclusive, "DigitalOut"),
+            PRTN_PIN_CLAIM__(BacklightPin, ::prtn::pin::PinUse::Exclusive, "DigitalOut"),
+        };
+
+        static_assert(::prtn::pin::validatePinClaims(PinClaims), "ST7735AnimationExample has conflicting pin claims");
+
         constexpr uint32_t SpiClockHz     = 20 * 1000 * 1000;
         constexpr size_t   DeviceIndex    = 0;
         constexpr size_t   DmaBufferBytes = 3200;
@@ -39,9 +70,9 @@ namespace ST7735AnimationExample
         inline SPI::BusConfig makeBusConfig() {
             SPI::BusConfig config {};
             config.host                = SPI2_HOST;
-            config.bus.mosi_io_num     = MosiPin;
+            config.bus.mosi_io_num     = MosiPin.number();
             config.bus.miso_io_num     = -1;
-            config.bus.sclk_io_num     = SckPin;
+            config.bus.sclk_io_num     = SckPin.number();
             config.bus.quadwp_io_num   = -1;
             config.bus.quadhd_io_num   = -1;
             config.bus.max_transfer_sz = DmaBufferBytes;
@@ -55,7 +86,7 @@ namespace ST7735AnimationExample
             config.index                 = DeviceIndex;
             config.device.clock_speed_hz = SpiClockHz;
             config.device.mode           = 0;
-            config.device.spics_io_num   = CsPin;
+            config.device.spics_io_num   = CsPin.number();
             config.device.queue_size     = 4;
             return config;
         }
@@ -63,9 +94,9 @@ namespace ST7735AnimationExample
         inline ST7735::Config makeLcdConfig() {
             ST7735::Config config       = ST7735::makeConfig(LcdOrientation);
             config.dmaBufferBytes       = DmaBufferBytes;
-            config.resetPin             = static_cast<gpio_num_t>(ResetPin);
-            config.dcPin                = static_cast<gpio_num_t>(DcPin);
-            config.backlightPin         = static_cast<gpio_num_t>(BacklightPin);
+            config.resetPin             = ResetPin.gpioNum();
+            config.dcPin                = DcPin.gpioNum();
+            config.backlightPin         = BacklightPin.gpioNum();
             config.useResetPin          = true;
             config.useBacklightPin      = true;
             config.autoDmaBuffer        = true;
