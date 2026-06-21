@@ -1,0 +1,36 @@
+                 ESP32-S3-N16R8 Dev Board Pinout
+                 WIFI + BLE Wire
+        ┌───────────────────────────────────────────────┐
+ 01 3.3V                                                │ GND                         01
+ 02 3.3V                                                │ U0TXD                       02
+ 03 CHIP_PU / EN                                        │ U0RXD                       03
+ 04 GPIO04                                              │ GPIO01                      04
+ 05 GPIO05                                              │ GPIO02                      05
+ 06 GPIO06                                              │ GPIO42                      06
+ 07 GPIO07                                              │ GPIO41                      07
+ 08 GPIO15                                              │ GPIO40                      08
+ 09 GPIO16                                              │ GPIO39                      09
+ 10 GPIO17                                              │ GPIO38                      10
+ 11 GPIO18                                              │ GPIO37                      11
+ 12 GPIO08                                              │ GPIO36                      12
+ 13 GPIO03 / USB-JTAG SEL                               │ GPIO35                      13
+ 14 GPIO46                                              │ GPIO00 / BOOT               14
+ 15 GPIO09                                              │ GPIO45                      15
+ 16 GPIO10                                              │ GPIO48 / RGB WS2812B        16
+ 17 GPIO11                                              │ GPIO47                      17
+ 18 GPIO12                                              │ GPIO21                      18
+ 19 GPIO13                                              │ GPIO20 / USB_D+             19
+ 20 GPIO14                                              │ GPIO19 / USB_D-             20
+ 21 5V / IN-OUT                                         │ GND                         21
+ 22 GND                                                 │ GND                         22
+        └───────────────────────────────────────────────┘
+            USB TYPE-C               COM TYPE-C
+    
+Notes:
+  Module: ESP32-S3-N16R8 / ESP32-S3-WROOM-1, 16MB flash, 8MB OPI PSRAM.
+  Arduino FQBN: esp32:esp32:esp32s3.
+  BOOT button pulls GPIO00 to GND.
+  RST button pulls CHIP_PU / EN to GND.
+  Onboard RGB LED is WS2812B-compatible on GPIO48.
+  Native USB uses GPIO19 USB_D- and GPIO20 USB_D+.
+  UART bridge uses U0TXD and U0RXD.
