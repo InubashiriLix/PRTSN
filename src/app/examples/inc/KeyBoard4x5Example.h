@@ -5,6 +5,7 @@
 #include "src/dom/NodeInfo.h"
 #include "src/dvc/inc/Serial.h"
 #include "src/svc/inc/SerialConsoleService.h"
+#include "src/svc/inc/NkroKeyboard.h"
 
 #include <Arduino.h>
 
@@ -52,6 +53,7 @@ namespace KeyBoard4x5Example
             };
 
             KeyBoard4x5  keyboard {keyboardConfig, &console};
+            NkroKeyboard nkroKeyboard {};
             TaskHandle_t taskHandle = nullptr;
         };
 

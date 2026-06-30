@@ -1,6 +1,6 @@
 -- Project-local LazyVim configuration for PRTN.
 -- PRTN = PRTS Node
---
+
 -- Board:
 --   AirM2M CORE ESP32-C3
 --
@@ -17,8 +17,10 @@ local fqbn = "esp32:esp32:AirM2M_CORE_ESP32C3"
 local clangd = vim.fn.exepath("clangd")
 local arduino_cli = vim.fn.exepath("arduino-cli")
 local arduino_ls = vim.fn.exepath("arduino-language-server")
-local esp_rv32_query_driver = vim.fn.expand("~/.arduino15/packages/esp32/tools/esp-rv32/*/bin/riscv32-esp-elf-*")
-local project_root = vim.fs.root(vim.fn.getcwd(), { ".lazy.lua", "PRTN.ino", "compile_commands.json" }) or vim.fn.getcwd()
+-- local esp_rv32_query_driver = vim.fn.expand("~/.arduino15/packages/esp32/tools/esp-rv32/*/bin/riscv32-esp-elf-*")
+
+local project_root = vim.fs.root(vim.fn.getcwd(), { ".lazy.lua", "PRTN.ino", "compile_commands.json" })
+	or vim.fn.getcwd()
 local debug_elf = project_root .. "/build/PRTN.ino.elf"
 local arduino_clangd = project_root .. "/tools/clangd-esp32"
 local clangd_db_dir = project_root .. "/.clangd-db"
@@ -53,7 +55,34 @@ local function file_exists(path)
 end
 
 local function is_source_arg(arg)
-	return type(arg) == "string" and arg:match("%.%a+$") and not arg:match("^%-")
+	if type(arg) ~= "string" or arg:match("^%-") then
+		return false
+	end
+
+	return arg:match("%.c$") ~= nil
+		or arg:match("%.cc$") ~= nil
+		or arg:match("%.cpp$") ~= nil
+		or arg:match("%.cxx$") ~= nil
+		or arg:match("%.ino$") ~= nil
+end
+
+local function detect_query_driver()
+	local db_path = project_root .. "/compile_commands.json"
+	if not file_exists(db_path) then
+		return vim.fn.expand("~/.arduino15/packages/esp32/tools/esp-rv32/*/bin/riscv32-esp-elf-*")
+	end
+	local ok, decoded = pcall(vim.json.decode, table.concat(vim.fn.readfile(db_path), "\n"))
+	if not ok or not decoded[1] then
+		return nil
+	end
+	local args = decoded[1].arguments or {}
+	for _, arg in ipairs(args) do
+		-- 匹配 xtensa-esp32s3-elf-g++ 或 riscv32-esp-elf-g++
+		local prefix = arg:match("/(.+)%-g%+%+$")
+		if prefix then
+			return arg:gsub("%-g%+%+$", "-*")
+		end
+	end
 end
 
 local function clone_command(entry)
@@ -78,6 +107,27 @@ local function command_args(entry)
 
 	if entry.command then
 		return vim.split(entry.command, "%s+")
+	end
+
+	return nil
+end
+
+local function detect_compiler()
+	local db_path = project_root .. "/compile_commands.json"
+	if not file_exists(db_path) then
+		return nil
+	end
+
+	local ok, decoded = pcall(vim.json.decode, table.concat(vim.fn.readfile(db_path), "\n"))
+	if not ok or type(decoded) ~= "table" then
+		return nil
+	end
+
+	for _, entry in ipairs(decoded) do
+		local args = command_args(entry)
+		if args and args[1] and args[1]:match("%-g%+%+$") then
+			return args[1]
+		end
 	end
 
 	return nil
@@ -120,7 +170,22 @@ local function get_esp_cxx_system_includes()
 
 	esp_cxx_system_includes = {}
 	local seen = {}
-	local roots = vim.fn.glob(vim.fn.expand("~/.arduino15/packages/esp32/tools/esp-rv32/*/riscv32-esp-elf/include/c++/*"), true, true)
+	local compiler = detect_compiler()
+	local tool_root = compiler and compiler:match("(.+)/bin/[^/]+$")
+	local target = "riscv32-esp-elf"
+	local cxx_target_subdir = "riscv32-esp-elf"
+
+	if compiler and compiler:match("xtensa%-esp32") then
+		target = "xtensa-esp-elf"
+		cxx_target_subdir = "xtensa-esp-elf/esp32s3"
+	elseif compiler and compiler:match("riscv32%-esp%-elf") then
+		target = "riscv32-esp-elf"
+		cxx_target_subdir = "riscv32-esp-elf"
+	end
+
+	if not tool_root then
+		tool_root = newest_glob("~/.arduino15/packages/esp32/tools/esp-rv32/*")
+	end
 
 	local function add_dir(path)
 		if path and path ~= "" and vim.fn.isdirectory(path) == 1 and not seen[path] then
@@ -129,16 +194,15 @@ local function get_esp_cxx_system_includes()
 		end
 	end
 
+	local roots = vim.fn.glob(tool_root .. "/" .. target .. "/include/c++/*", true, true)
 	for _, root in ipairs(roots) do
 		add_dir(root)
-		add_dir(root .. "/riscv32-esp-elf")
-		add_dir(root .. "/riscv32-esp-elf/.")
+		add_dir(root .. "/" .. cxx_target_subdir)
+		add_dir(root .. "/" .. cxx_target_subdir .. "/.")
 		add_dir(root .. "/backward")
 	end
 
-	for _, sysroot in ipairs(vim.fn.glob(vim.fn.expand("~/.arduino15/packages/esp32/tools/esp-rv32/*/riscv32-esp-elf/include"), true, true)) do
-		add_dir(sysroot)
-	end
+	add_dir(tool_root .. "/" .. target .. "/include")
 
 	return esp_cxx_system_includes
 end
@@ -242,8 +306,9 @@ local function write_clangd_db()
 			local normalized = clone_command(entry)
 			add(normalized)
 
-			if entry.file:match("/build/sketch/src/.+%.c[cp]p$") then
-				local source_file = entry.file:gsub("/build/sketch/src/", "/src/")
+			local source_rel = entry.file:match("/compdb/sketch/(src/.+)$") or entry.file:match("/build/sketch/(src/.+)$")
+			if source_rel and is_source_arg(source_rel) then
+				local source_file = project_root .. "/" .. source_rel
 				local mapped = clone_command(entry)
 				mapped.file = source_file
 				local args = command_args(mapped)
@@ -383,7 +448,10 @@ return {
 			local dap = require("dap")
 
 			if vim.fn.executable(codelldb) == 0 then
-				vim.notify("codelldb not found. Run :MasonInstall codelldb for ESP32-C3 nvim-dap debugging.", vim.log.levels.WARN)
+				vim.notify(
+					"codelldb not found. Run :MasonInstall codelldb for ESP32-C3 nvim-dap debugging.",
+					vim.log.levels.WARN
+				)
 				return
 			end
 
@@ -448,7 +516,8 @@ return {
 						"--function-arg-placeholders",
 						"--fallback-style=llvm",
 						"--compile-commands-dir=" .. clangd_db_dir,
-						"--query-driver=" .. esp_rv32_query_driver,
+						-- "--query-driver=" .. esp_rv32_query_driver,
+						"--query-driver=" .. detect_query_driver(),
 					},
 					filetypes = {
 						"c",
