@@ -9,7 +9,7 @@ BOARD_SEARCH  ?= ESP32S3
 # Use `arduino-cli board details -b esp32:esp32:esp32s3`
 # to see all values supported by the installed ESP32 core.
 UPLOAD_SPEED     ?= 921600
-USB_MODE         ?= hwcdc
+USB_MODE         ?= default
 CDC_ON_BOOT      ?= default
 MSC_ON_BOOT      ?= default
 DFU_ON_BOOT      ?= default
