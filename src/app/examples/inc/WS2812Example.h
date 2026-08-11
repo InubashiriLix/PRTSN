@@ -8,7 +8,6 @@
 
 #include <Arduino.h>
 
-#include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 #ifdef Serial
@@ -98,28 +97,26 @@ namespace WS2812Example
             };
         }
 
-        inline void logError(Context& app, const char* op, WS2812::Error err) {
-            app.console.error("WS2812 %s failed: code=%s detail=%s rmt=%s native=%ld",
+        template <auto... Errors>
+        inline void logError(Context& app, const char* op, const ErrorSet<Errors...>& error) {
+            app.console.error("WS2812 %s failed: detail=%s",
                               op,
-                              toName(err.code),
-                              WS2812::detailName(err.detail),
-                              RMT::detailName(err.rmt.detail),
-                              static_cast<long>(err.native));
+                              WS2812::detailName(error.native()));
         }
 
         inline bool updateColorFlow(Context& app) {
             for (size_t i = 0; i < app.led.pixelCount(); ++i) {
-                const WS2812::Color color = wheel(static_cast<uint8_t>(app.frame + i * 32));
-                const auto          err   = app.led.setPixel(i, color);
-                if (!err) {
-                    logError(app, "setPixel", err);
+                const WS2812::Color color  = wheel(static_cast<uint8_t>(app.frame + i * 32));
+                const auto          result = app.led.setPixel(i, color);
+                if (result.is_err()) {
+                    logError(app, "setPixel", result.error());
                     return false;
                 }
             }
 
-            const auto showErr = app.led.show();
-            if (!showErr) {
-                logError(app, "show", showErr);
+            const auto showResult = app.led.show();
+            if (showResult.is_err()) {
+                logError(app, "show", showResult.error());
                 return false;
             }
 
@@ -181,10 +178,10 @@ namespace WS2812Example
                          static_cast<unsigned>(Detail::Brightness),
                          WS2812::colorOrderName(WS2812::ColorOrder::GRB));
 
-        const auto err = app.led.setup();
-        if (!err) {
+        const auto setupResult = app.led.setup();
+        if (setupResult.is_err()) {
             app.nodeInfo.updateNodeState(ERROR);
-            Detail::logError(app, "setup", err);
+            Detail::logError(app, "setup", setupResult.error());
             app.console.printState(app.nodeInfo.getNodeState());
             return;
         }

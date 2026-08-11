@@ -3,6 +3,7 @@
 #include "driver/gpio.h"
 #include "src/fw/inc/RMT.h"
 #include "src/fw/inc/std_err.h"
+#include "src/fw/inc/Result.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -58,8 +59,8 @@ public:
         NO_BUFFER,
         SETUP_RMT_FAILED,
         END_RMT_FAILED,
-        TRANSMIT_FAILED,
-        WAIT_FAILED,
+        RMT_TRANSMIT_FAILED,
+        RMT_WAIT_FAILED,
     };
 
     struct Error
@@ -86,19 +87,45 @@ public:
     WS2812(const WS2812&)            = delete;
     WS2812& operator=(const WS2812&) = delete;
 
-    [[nodiscard]] Error setup();
-    [[nodiscard]] Error end();
-    [[nodiscard]] Error show();
-    [[nodiscard]] Error clear(bool flush = true);
+    // the Result defines
+    using SetupErrors     = ErrorSet<WS2812::Detail::ALREADY_STARTED,
+                                     WS2812::Detail::NO_BUFFER,
+                                     WS2812::Detail::INVALID_CONFIG,
+                                     Detail::SETUP_RMT_FAILED>;
+    using SetupResult     = Result<void, SetupErrors>;
+    using EndResult       = Result<void, ErrorSet<Detail::NOT_STARTED, Detail::END_RMT_FAILED>>;
+    using ShowErrors      = ErrorSet<WS2812::Detail::NOT_STARTED,
+                                     WS2812::Detail::NO_BUFFER,
+                                     WS2812::Detail::RMT_TRANSMIT_FAILED,
+                                     WS2812::Detail::RMT_WAIT_FAILED>;
+    using ShowResult      = Result<void, ShowErrors>;
+    using ClearErrors     = ErrorSet<WS2812::Detail::NO_BUFFER>;
+    using ClearResult     = Result<void, ClearErrors>;
+    using ClearShowErrors = ShowErrors;
+    using ClearShowResult = Result<void, ClearShowErrors>;
+    // gaze into a pit
 
-    [[nodiscard]] Error setPixel(size_t index, Color color);
-    [[nodiscard]] Error setColor(uint8_t r, uint8_t g, uint8_t b, uint8_t a, size_t index);
-    [[nodiscard]] Error setAllColors(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
-    [[nodiscard]] Error setRed(uint8_t r, size_t index);
-    [[nodiscard]] Error setGreen(uint8_t g, size_t index);
-    [[nodiscard]] Error setBlue(uint8_t b, size_t index);
-    [[nodiscard]] Error setAlpha(uint8_t a, size_t index);
-    [[nodiscard]] Error setBrightness(uint8_t brightness, bool flush = false);
+    [[nodiscard]] SetupResult     setup();
+    [[nodiscard]] EndResult       end();
+    [[nodiscard]] ShowResult      show();
+    [[nodiscard]] ClearResult     clear();
+    [[nodiscard]] ClearShowResult clearShow();
+
+    using SetPixelResult       = Result<void, ErrorSet<WS2812::Detail::INVALID_INDEX, WS2812::Detail::NO_BUFFER>>;
+    using SetColorResult       = SetPixelResult;
+    using SetAllColorsResult   = Result<void, ErrorSet<WS2812::Detail::NO_BUFFER>>;
+    using SetSingleColorResult = Result<void, ErrorSet<WS2812::Detail::INVALID_INDEX>>;
+    using SetAlphaResult       = SetPixelResult;
+    using SetBrightnessErrors  = ShowErrors;
+    using SetBrightnessResult  = Result<void, SetBrightnessErrors>;
+    [[nodiscard]] SetPixelResult       setPixel(size_t index, Color color);
+    [[nodiscard]] SetColorResult       setColor(uint8_t r, uint8_t g, uint8_t b, uint8_t a, size_t index);
+    [[nodiscard]] SetAllColorsResult   setAllColors(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
+    [[nodiscard]] SetSingleColorResult setRed(uint8_t r, size_t index);
+    [[nodiscard]] SetSingleColorResult setGreen(uint8_t g, size_t index);
+    [[nodiscard]] SetSingleColorResult setBlue(uint8_t b, size_t index);
+    [[nodiscard]] SetAlphaResult       setAlpha(uint8_t a, size_t index);
+    [[nodiscard]] SetBrightnessResult  setBrightness(uint8_t brightness, bool flush = false);
 
     [[nodiscard]] bool    started() const;
     [[nodiscard]] size_t  pixelCount() const;
@@ -120,20 +147,23 @@ private:
     Error        m_lastError {};
 
 private:
-    [[nodiscard]] Error allocateBuffers();
-    void                releaseBuffers();
-    void                encode();
-    void                encodePixel(size_t pixelIndex, size_t& symbolIndex);
-    void                encodeByte(uint8_t value, size_t& symbolIndex);
-    void                encodeBit(bool one, size_t& symbolIndex);
-    void                orderedBytes(Color color, uint8_t& first, uint8_t& second, uint8_t& third) const;
-    [[nodiscard]] Color scaled(Color color) const;
+    using AllocateBufferErrors = ErrorSet<StdError::NO_MEM>;
+    using AllocateBufferResult = Result<void, AllocateBufferErrors>;
+    [[nodiscard]] AllocateBufferResult allocateBuffers();
+    void                               releaseBuffers();
+    void                               encode();
+    void                               encodePixel(size_t pixelIndex, size_t& symbolIndex);
+    void                               encodeByte(uint8_t value, size_t& symbolIndex);
+    void                               encodeBit(bool one, size_t& symbolIndex);
+    void                               orderedBytes(Color color, uint8_t& first, uint8_t& second, uint8_t& third) const;
+    [[nodiscard]] Color                scaled(Color color) const;
 
     [[nodiscard]] Error makeError(StdError code, Detail detail, esp_err_t native = ESP_OK, RMT::Error rmt = {});
     [[nodiscard]] Error mapRmtError(RMT::Error rmt, Detail detail);
-    [[nodiscard]] Error clearError();
-    [[nodiscard]] bool  validConfig() const;
-    [[nodiscard]] bool  validIndex(size_t index) const;
+
+    void               clearError();
+    [[nodiscard]] bool validConfig() const;
+    [[nodiscard]] bool validIndex(size_t index) const;
 
     static RMT::Config makeRmtConfig(gpio_num_t pin, const Config& config);
 };

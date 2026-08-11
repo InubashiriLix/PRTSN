@@ -16,141 +16,163 @@ WS2812::~WS2812() {
     end();
 }
 
-WS2812::Error WS2812::setup() {
-    if (m_started) {
-        return makeError(StdError::INVALID_STATE, Detail::ALREADY_STARTED, ESP_ERR_INVALID_STATE);
-    }
-    if (!validConfig()) {
-        return makeError(StdError::INVALID_ARGS, Detail::INVALID_CONFIG, ESP_ERR_INVALID_ARG);
-    }
+WS2812::SetupResult WS2812::setup() {
+    if (m_started)
+        return Err<Detail::ALREADY_STARTED>();
 
-    Error err = allocateBuffers();
-    if (!err) {
-        return err;
-    }
+    if (!validConfig())
+        return Err<Detail::INVALID_CONFIG>();
 
-    RMT::Error rmtErr = m_rmt.setup();
-    if (!rmtErr) {
+    const AllocateBufferResult allocateResult = allocateBuffers();
+    if (allocateResult.is_err())
+        return Err<Detail::NO_BUFFER>();
+
+    const RMT::Error rmtResult = m_rmt.setup();
+    if (!rmtResult) {
         releaseBuffers();
-        return mapRmtError(rmtErr, Detail::SETUP_RMT_FAILED);
+        return Err<Detail::SETUP_RMT_FAILED>();
+    }
+
+    const ClearResult clearResult = clear();
+    if (clearResult.is_err()) {
+        (void)m_rmt.end();
+        releaseBuffers();
+        return Err(clearResult.error());
     }
 
     m_started = true;
-    return clear(false);
+    return Ok();
 }
 
-WS2812::Error WS2812::end() {
+WS2812::EndResult WS2812::end() {
     if (!m_started) {
         releaseBuffers();
-        return clearError();
+        return Err<Detail::NOT_STARTED>();
     }
 
     RMT::Error rmtErr = m_rmt.end();
     if (!rmtErr) {
-        return mapRmtError(rmtErr, Detail::END_RMT_FAILED);
+        return Err<Detail::END_RMT_FAILED>();
     }
 
     m_started = false;
     releaseBuffers();
-    return clearError();
+    clearError();
+    return Ok();
 }
 
-WS2812::Error WS2812::show() {
-    if (!m_started) {
-        return makeError(StdError::INVALID_STATE, Detail::NOT_STARTED, ESP_ERR_INVALID_STATE);
-    }
-    if (m_pixels == nullptr || m_symbols == nullptr || m_symbolCount == 0) {
-        return makeError(StdError::INVALID_STATE, Detail::NO_BUFFER, ESP_ERR_INVALID_STATE);
-    }
+WS2812::ShowResult WS2812::show() {
+    if (!m_started)
+        return Err<Detail::NOT_STARTED>();
+    if (m_pixels == nullptr || m_symbols == nullptr || m_symbolCount == 0)
+        return Err<Detail::NO_BUFFER>();
 
     encode();
 
     RMT::Error rmtErr = m_rmt.transmit(m_symbols, m_symbolCount);
-    if (!rmtErr) {
-        return mapRmtError(rmtErr, Detail::TRANSMIT_FAILED);
-    }
+    if (!rmtErr)
+        return Err<Detail::RMT_TRANSMIT_FAILED>();
 
     rmtErr = m_rmt.waitDone(m_config.showTimeoutMs);
-    if (!rmtErr) {
-        return mapRmtError(rmtErr, Detail::WAIT_FAILED);
-    }
+    if (!rmtErr)
+        return Err<Detail::RMT_WAIT_FAILED>();
 
-    return clearError();
+    clearError();
+    return Ok();
 }
 
-WS2812::Error WS2812::clear(bool flush) {
+WS2812::ClearResult WS2812::clear() {
     if (m_pixels == nullptr) {
-        return makeError(StdError::INVALID_STATE, Detail::NO_BUFFER, ESP_ERR_INVALID_STATE);
+        return Err<Detail::NO_BUFFER>();
     }
 
     std::memset(m_pixels, 0, sizeof(Color) * m_config.pixelCount);
-    return flush ? show() : clearError();
+    clearError();
+    return Ok();
 }
 
-WS2812::Error WS2812::setPixel(size_t index, Color color) {
-    if (!validIndex(index)) {
-        return makeError(StdError::INVALID_ARGS, Detail::INVALID_INDEX, ESP_ERR_INVALID_ARG);
+WS2812::ClearShowResult WS2812::clearShow() {
+    const ClearResult clearResult = clear();
+    if (clearResult.is_err()) {
+        return Err(clearResult.error());
     }
-    if (m_pixels == nullptr) {
-        return makeError(StdError::INVALID_STATE, Detail::NO_BUFFER, ESP_ERR_INVALID_STATE);
-    }
+
+    return show();
+}
+
+WS2812::SetPixelResult WS2812::setPixel(size_t index, Color color) {
+    if (!validIndex(index))
+        return Err<Detail::INVALID_INDEX>();
+    if (m_pixels == nullptr)
+        return Err<Detail::NO_BUFFER>();
 
     m_pixels[index] = color;
-    return clearError();
+    clearError();
+    return Ok();
 }
 
-WS2812::Error WS2812::setColor(uint8_t r, uint8_t g, uint8_t b, uint8_t a, size_t index) {
+WS2812::SetColorResult WS2812::setColor(uint8_t r, uint8_t g, uint8_t b, uint8_t a, size_t index) {
     return setPixel(index, Color {.r = r, .g = g, .b = b, .a = a});
 }
 
-WS2812::Error WS2812::setAllColors(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-    if (m_pixels == nullptr) {
-        return makeError(StdError::INVALID_STATE, Detail::NO_BUFFER, ESP_ERR_INVALID_STATE);
-    }
+WS2812::SetAllColorsResult WS2812::setAllColors(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    if (m_pixels == nullptr)
+        return Err<Detail::NO_BUFFER>();
 
     const Color color {.r = r, .g = g, .b = b, .a = a};
     for (size_t i = 0; i < m_config.pixelCount; ++i) {
         m_pixels[i] = color;
     }
 
-    return clearError();
+    clearError();
+    return Ok();
 }
 
-WS2812::Error WS2812::setRed(uint8_t r, size_t index) {
+WS2812::SetSingleColorResult WS2812::setRed(uint8_t r, size_t index) {
     if (!validIndex(index)) {
-        return makeError(StdError::INVALID_ARGS, Detail::INVALID_INDEX, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_INDEX>();
     }
     m_pixels[index].r = r;
-    return clearError();
+    clearError();
+    return Ok();
 }
 
-WS2812::Error WS2812::setGreen(uint8_t g, size_t index) {
+WS2812::SetSingleColorResult WS2812::setGreen(uint8_t g, size_t index) {
     if (!validIndex(index)) {
-        return makeError(StdError::INVALID_ARGS, Detail::INVALID_INDEX, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_INDEX>();
     }
     m_pixels[index].g = g;
-    return clearError();
+    clearError();
+    return Ok();
 }
 
-WS2812::Error WS2812::setBlue(uint8_t b, size_t index) {
+WS2812::SetSingleColorResult WS2812::setBlue(uint8_t b, size_t index) {
     if (!validIndex(index)) {
-        return makeError(StdError::INVALID_ARGS, Detail::INVALID_INDEX, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_INDEX>();
     }
     m_pixels[index].b = b;
-    return clearError();
+    clearError();
+    return Ok();
 }
 
-WS2812::Error WS2812::setAlpha(uint8_t a, size_t index) {
-    if (!validIndex(index)) {
-        return makeError(StdError::INVALID_ARGS, Detail::INVALID_INDEX, ESP_ERR_INVALID_ARG);
-    }
+WS2812::SetAlphaResult WS2812::setAlpha(uint8_t a, size_t index) {
+    if (!validIndex(index))
+        return Err<Detail::INVALID_INDEX>();
+    if (m_pixels == nullptr)
+        return Err<Detail::NO_BUFFER>();
+
     m_pixels[index].a = a;
-    return clearError();
+    clearError();
+    return Ok();
 }
 
-WS2812::Error WS2812::setBrightness(uint8_t brightness, bool flush) {
+WS2812::SetBrightnessResult WS2812::setBrightness(uint8_t brightness, bool flush) {
     m_config.brightness = brightness;
-    return flush ? show() : clearError();
+    if (flush)
+        return show();
+
+    clearError();
+    return Ok();
 }
 
 bool WS2812::started() const {
@@ -195,10 +217,10 @@ const char* WS2812::detailName(Detail detail) noexcept {
             return "SETUP_RMT_FAILED";
         case Detail::END_RMT_FAILED:
             return "END_RMT_FAILED";
-        case Detail::TRANSMIT_FAILED:
-            return "TRANSMIT_FAILED";
-        case Detail::WAIT_FAILED:
-            return "WAIT_FAILED";
+        case Detail::RMT_TRANSMIT_FAILED:
+            return "RMT_TRANSMIT_FAILED";
+        case Detail::RMT_WAIT_FAILED:
+            return "RMT_WAIT_FAILED";
     }
 
     return "UNKNOWN";
@@ -219,7 +241,7 @@ const char* WS2812::colorOrderName(ColorOrder order) noexcept {
     return "UNKNOWN";
 }
 
-WS2812::Error WS2812::allocateBuffers() {
+WS2812::AllocateBufferResult WS2812::allocateBuffers() {
     releaseBuffers();
 
     const size_t pixelBytes = sizeof(Color) * m_config.pixelCount;
@@ -228,17 +250,18 @@ WS2812::Error WS2812::allocateBuffers() {
     m_pixels = new (std::nothrow) Color[m_config.pixelCount] {};
     if (m_pixels == nullptr) {
         m_symbolCount = 0;
-        return makeError(StdError::NO_MEM, Detail::NO_BUFFER, ESP_ERR_NO_MEM);
+        return Err<StdError::NO_MEM>();
     }
 
     m_symbols = new (std::nothrow) RMT::Symbol[m_symbolCount] {};
     if (m_symbols == nullptr) {
         releaseBuffers();
-        return makeError(StdError::NO_MEM, Detail::NO_BUFFER, ESP_ERR_NO_MEM);
+        return Err<StdError::NO_MEM>();
     }
 
     std::memset(m_pixels, 0, pixelBytes);
-    return clearError();
+    clearError();
+    return Ok();
 }
 
 void WS2812::releaseBuffers() {
@@ -329,9 +352,8 @@ WS2812::Error WS2812::mapRmtError(RMT::Error rmt, Detail detail) {
     return makeError(rmt.code, detail, rmt.native, rmt);
 }
 
-WS2812::Error WS2812::clearError() {
+void WS2812::clearError() {
     m_lastError = Error {};
-    return m_lastError;
 }
 
 bool WS2812::validConfig() const {
