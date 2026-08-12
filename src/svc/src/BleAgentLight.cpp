@@ -167,7 +167,7 @@ void BleAgentLightService::handleWrite(const uint8_t* data, std::size_t size) {
     const uint8_t hintedOpcode = size == 0 || data == nullptr ? 0 : data[0];
     const auto    parsed       = ble_agent_light::protocol::decode(data, size);
     if (parsed.is_err()) {
-        sendStatus(hintedOpcode, parsed.error().native());
+        sendStatus(hintedOpcode, parsed.error().code());
         return;
     }
 
@@ -182,7 +182,7 @@ void BleAgentLightService::handleWrite(const uint8_t* data, std::size_t size) {
             if (result.is_ok())
                 sendStatus(opcode, Status::Ok, result.value());
             else
-                sendStatus(opcode, result.error().native());
+                sendStatus(opcode, result.error().code());
             return;
         }
 
@@ -209,7 +209,7 @@ void BleAgentLightService::respondMutation(
     const MutationResult& result) {
     sendStatus(
         opcode,
-        result.is_ok() ? Status::Ok : result.error().native(),
+        result.is_ok() ? Status::Ok : result.error().code(),
         id);
 }
 

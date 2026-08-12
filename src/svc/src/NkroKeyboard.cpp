@@ -13,14 +13,14 @@ NkroKeyboard::~NkroKeyboard() {
     }
 }
 
-Result<void, StdError> NkroKeyboard::setup() {
+Result<void, StdErrors> NkroKeyboard::setup() {
     if (m_started) {
-        return Err(StdError::INVALID_STATE);
+        return Err<StdError::INVALID_STATE>();
     }
 
     if (!m_registered) {
         if (!USBHID::addDevice(this, sizeof(prt_hid::nkro_report_desc))) {
-            return Err(StdError::FAIL);
+            return Err<StdError::FAIL>();
         }
         m_registered = true;
     }
@@ -28,16 +28,16 @@ Result<void, StdError> NkroKeyboard::setup() {
     m_hid.begin();
     if (!USB.begin()) {
         m_hid.end();
-        return Err(StdError::FAIL);
+        return Err<StdError::FAIL>();
     }
     m_started = true;
 
     return Ok();
 }
 
-Result<void, StdError> NkroKeyboard::end() {
+Result<void, StdErrors> NkroKeyboard::end() {
     if (!m_started) {
-        return Err(StdError::INVALID_STATE);
+        return Err<StdError::INVALID_STATE>();
     }
     m_hid.end();
     m_started = false;
@@ -45,9 +45,9 @@ Result<void, StdError> NkroKeyboard::end() {
     return Ok();
 }
 
-Result<bool, StdError> NkroKeyboard::ready() {
+Result<bool, StdErrors> NkroKeyboard::ready() {
     if (!m_started) {
-        return Err(StdError::INVALID_STATE);
+        return Err<StdError::INVALID_STATE>();
     }
     return Ok(m_hid.ready());
 }
@@ -87,7 +87,7 @@ void NkroKeyboard::_onOutput(uint8_t report_id, const uint8_t* buffer, uint16_t 
     }
 }
 
-Result<void, StdError> NkroKeyboard::press(uint8_t usage) {
+Result<void, StdErrors> NkroKeyboard::press(uint8_t usage) {
     if (isModifier(usage)) {
         m_report.modifiers |= uint8_t(1u << (usage & 0x07));
     }
@@ -95,13 +95,13 @@ Result<void, StdError> NkroKeyboard::press(uint8_t usage) {
         m_report.keys[usage >> 3] |= (1u << (usage & 0x07));
     }
     else {
-        return Err(StdError::INVALID_ARGUMENT);
+        return Err<StdError::INVALID_ARGUMENT>();
     }
 
     return sendKeyboard();
 }
 
-Result<void, StdError> NkroKeyboard::release(uint8_t usage) {
+Result<void, StdErrors> NkroKeyboard::release(uint8_t usage) {
     if (isModifier(usage)) {
         m_report.modifiers &= uint8_t(~(1u << (usage & 0x07)));
     }
@@ -109,12 +109,12 @@ Result<void, StdError> NkroKeyboard::release(uint8_t usage) {
         clearBit(m_report.keys, usage);
     }
     else {
-        return Err(StdError::INVALID_ARGUMENT);
+        return Err<StdError::INVALID_ARGUMENT>();
     }
     return sendKeyboard();
 }
 
-Result<void, StdError> NkroKeyboard::releaseAll() {
+Result<void, StdErrors> NkroKeyboard::releaseAll() {
     memset(&m_report, 0, sizeof(m_report));
     m_consumer = 0;
     m_system   = 0;
@@ -130,19 +130,19 @@ Result<void, StdError> NkroKeyboard::releaseAll() {
     return sendConsumer();
 }
 
-Result<void, StdError> NkroKeyboard::updateKeyboardState(const uint8_t* usageBitmap, size_t usageBitmapSize) {
+Result<void, StdErrors> NkroKeyboard::updateKeyboardState(const uint8_t* usageBitmap, size_t usageBitmapSize) {
     if (usageBitmap == nullptr || usageBitmapSize != KEY_USAGE_BITMAP_SIZE) {
-        return Err(StdError::INVALID_ARGUMENT);
+        return Err<StdError::INVALID_ARGUMENT>();
     }
 
     for (size_t index = sizeof(m_report.keys); index < prt_hid::KEY_ID_MODIFIERS_START / 8; ++index) {
         if (usageBitmap[index] != 0) {
-            return Err(StdError::INVALID_ARGUMENT);
+            return Err<StdError::INVALID_ARGUMENT>();
         }
     }
     for (size_t index = prt_hid::KEY_ID_MODIFIERS_END / 8 + 1; index < usageBitmapSize; ++index) {
         if (usageBitmap[index] != 0) {
-            return Err(StdError::INVALID_ARGUMENT);
+            return Err<StdError::INVALID_ARGUMENT>();
         }
     }
 
@@ -164,27 +164,27 @@ Result<void, StdError> NkroKeyboard::updateKeyboardState(const uint8_t* usageBit
     return result;
 }
 
-Result<void, StdError> NkroKeyboard::pressConsumer(uint16_t usage) {
+Result<void, StdErrors> NkroKeyboard::pressConsumer(uint16_t usage) {
     if (usage > prt_hid::HID_CONSUMER_USAGE_MAX) {
-        return Err(StdError::INVALID_ARGUMENT);
+        return Err<StdError::INVALID_ARGUMENT>();
     }
 
     m_consumer = usage;
     return sendConsumer();
 }
-Result<void, StdError> NkroKeyboard::releaseConsumer() {
+Result<void, StdErrors> NkroKeyboard::releaseConsumer() {
     m_consumer = 0u;
     return sendConsumer();
 }
-Result<void, StdError> NkroKeyboard::pressSystem(uint8_t bit) {
+Result<void, StdErrors> NkroKeyboard::pressSystem(uint8_t bit) {
     if (bit > 2) {
-        return Err(StdError::INVALID_ARGUMENT);
+        return Err<StdError::INVALID_ARGUMENT>();
     }
     m_system |= uint8_t(1u << bit);
     return sendSystem();
 }
 
-Result<void, StdError> NkroKeyboard::releaseSystem() {
+Result<void, StdErrors> NkroKeyboard::releaseSystem() {
     m_system = 0u;
     return sendSystem();
 }
@@ -207,34 +207,34 @@ inline void NkroKeyboard::clearBit(uint8_t* bitmap, uint8_t usage) {
     bitmap[usage >> 3] &= uint8_t(~(1u << (usage & 0x07)));
 }
 
-Result<void, StdError> NkroKeyboard::sendKeyboard() {
+Result<void, StdErrors> NkroKeyboard::sendKeyboard() {
     if (!m_started) {
-        return Err(StdError::INVALID_STATE);
+        return Err<StdError::INVALID_STATE>();
     }
 
     if (!m_hid.SendReport(static_cast<uint8_t>(ReportId::KEYBOARD), &m_report, sizeof(m_report))) {
-        return Err(StdError::FAIL);
+        return Err<StdError::FAIL>();
     }
     return Ok();
 }
 
-Result<void, StdError> NkroKeyboard::sendConsumer() {
+Result<void, StdErrors> NkroKeyboard::sendConsumer() {
     if (!m_started) {
-        return Err(StdError::INVALID_STATE);
+        return Err<StdError::INVALID_STATE>();
     }
 
     if (!m_hid.SendReport(static_cast<uint8_t>(ReportId::CONSUMER), &m_consumer, sizeof(m_consumer))) {
-        return Err(StdError::FAIL);
+        return Err<StdError::FAIL>();
     }
     return Ok();
 }
-Result<void, StdError> NkroKeyboard::sendSystem() {
+Result<void, StdErrors> NkroKeyboard::sendSystem() {
     if (!m_started) {
-        return Err(StdError::INVALID_STATE);
+        return Err<StdError::INVALID_STATE>();
     }
 
     if (!m_hid.SendReport(static_cast<uint8_t>(ReportId::SYSTEM), &m_system, sizeof(m_system))) {
-        return Err(StdError::FAIL);
+        return Err<StdError::FAIL>();
     }
     return Ok();
 }

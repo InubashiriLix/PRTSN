@@ -18,17 +18,13 @@ namespace WS2812Example
 {
     namespace Detail
     {
-        struct Ws2812DataOwner;
-
-        constexpr auto LedPin = PRTN_REG_PIN__(
-            Ws2812DataOwner,
-            ::prtn::b::rmt::tx0);
-
-        constexpr auto PinClaims = std::array {
-            PRTN_PIN_CLAIM__(LedPin, ::prtn::pin::PinUse::Exclusive, "RmtTx"),
+        enum class PinId : uint8_t
+        {
+            LedData,
         };
 
-        static_assert(::prtn::pin::validatePinClaims(PinClaims), "WS2812Example has conflicting pin claims");
+        inline constexpr auto Pins = ::prtn::pin::layout(
+            ::prtn::pin::bind(PinId::LedData, GPIO_NUM_48, ::prtn::pin::Role::RmtTx));
 
         constexpr size_t      LedCount       = 8;
         constexpr uint8_t     Brightness     = 32;
@@ -58,7 +54,7 @@ namespace WS2812Example
 
             dvc::Serial          serial {AppConfig::Hardware::SerialBaudrate};
             SerialConsoleService console {serial};
-            WS2812               led {LedPin.gpioNum(), makeConfig()};
+            WS2812               led {Pins[PinId::LedData], makeConfig()};
 
             TaskHandle_t taskHandle = nullptr;
             uint32_t     frame      = 0;
@@ -97,11 +93,15 @@ namespace WS2812Example
             };
         }
 
-        template <auto... Errors>
-        inline void logError(Context& app, const char* op, const ErrorSet<Errors...>& error) {
-            app.console.error("WS2812 %s failed: detail=%s",
+        template <size_t Depth, auto... Errors>
+        inline void logError(Context& app, const char* op, const TracedErrorSet<Depth, Errors...>& error) {
+            app.console.error("WS2812 %s failed: %s::%s (%ld)%s%s",
                               op,
-                              WS2812::detailName(error.native()));
+                              error.domain(),
+                              error.name(),
+                              static_cast<long>(error.numeric_code()),
+                              error.has_message() ? ": " : "",
+                              error.message());
         }
 
         inline bool updateColorFlow(Context& app) {
@@ -173,7 +173,7 @@ namespace WS2812Example
         app.console.setup();
         app.console.printBootBanner(app.nodeInfo);
         app.console.info("WS2812 color flow: pin=%d count=%u brightness=%u order=%s",
-                         Detail::LedPin.number(),
+                         Detail::Pins[Detail::PinId::LedData],
                          static_cast<unsigned>(Detail::LedCount),
                          static_cast<unsigned>(Detail::Brightness),
                          WS2812::colorOrderName(WS2812::ColorOrder::GRB));

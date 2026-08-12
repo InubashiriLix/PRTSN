@@ -21,10 +21,17 @@ namespace INMP441Example
 {
     namespace Detail
     {
-        // Adjust these three pins to match your wiring.
-        constexpr int BckPin    = 6;
-        constexpr int WsPin     = 7;
-        constexpr int DataInPin = 10;
+        enum class PinId : uint8_t
+        {
+            Bck,
+            Ws,
+            DataIn,
+        };
+
+        inline constexpr auto Pins = ::prtn::pin::layout(
+            ::prtn::pin::bind(PinId::Bck, GPIO_NUM_6, ::prtn::pin::Role::I2sBclk),
+            ::prtn::pin::bind(PinId::Ws, GPIO_NUM_7, ::prtn::pin::Role::I2sWs),
+            ::prtn::pin::bind(PinId::DataIn, GPIO_NUM_10, ::prtn::pin::Role::I2sDataIn));
 
         constexpr uint32_t          SampleRate = 16000;
         constexpr i2s_channel_fmt_t Channel    = I2S_CHANNEL_FMT_ONLY_LEFT; // INMP441 L/R tied to GND.
@@ -49,7 +56,7 @@ namespace INMP441Example
 
             dvc::Serial          serial {AppConfig::Hardware::SerialBaudrate};
             SerialConsoleService console {serial};
-            INMP441              mic {BckPin, WsPin, DataInPin, SampleRate, Channel};
+            INMP441              mic {Pins[PinId::Bck], Pins[PinId::Ws], Pins[PinId::DataIn], SampleRate, Channel};
 
             int32_t      samples[SampleCount] {};
             TaskHandle_t taskHandle = nullptr;
@@ -180,9 +187,9 @@ namespace INMP441Example
         app.console.setup();
         app.console.printBootBanner(app.nodeInfo);
         app.console.info("INMP441 pins: bck=%d ws=%d data=%d sampleRate=%lu channel=left",
-                         Detail::BckPin,
-                         Detail::WsPin,
-                         Detail::DataInPin,
+                         Detail::Pins[Detail::PinId::Bck],
+                         Detail::Pins[Detail::PinId::Ws],
+                         Detail::Pins[Detail::PinId::DataIn],
                          static_cast<unsigned long>(Detail::SampleRate));
 
         const auto err = app.mic.setup();

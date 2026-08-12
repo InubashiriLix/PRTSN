@@ -21,12 +21,12 @@ class IKeyboardScanDevice
 public:
     virtual ~IKeyboardScanDevice() = default;
 
-    virtual Result<void, StdError> setup() = 0;
-    virtual Result<void, StdError> end()   = 0;
-    virtual Result<void, StdError> reset() = 0;
+    virtual Result<void, StdErrors> setup() = 0;
+    virtual Result<void, StdErrors> end()   = 0;
+    virtual Result<void, StdErrors> reset() = 0;
 
-    virtual Result<KeyboardScanFrame, StdError> scan()     = 0;
-    virtual Result<KeyboardScanFrame, StdError> snapshot() = 0;
+    virtual Result<KeyboardScanFrame, StdErrors> scan()     = 0;
+    virtual Result<KeyboardScanFrame, StdErrors> snapshot() = 0;
 
     virtual uint8_t  getRowNum() const = 0;
     virtual uint8_t  getColNum() const = 0;

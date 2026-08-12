@@ -19,8 +19,16 @@ namespace MPU6050Example
 {
     namespace Detail
     {
-        constexpr uint8_t     SdaPin         = IIC::DefaultSdaPin;
-        constexpr uint8_t     SclPin         = IIC::DefaultSclPin;
+        enum class PinId : uint8_t
+        {
+            I2cSda,
+            I2cScl,
+        };
+
+        inline constexpr auto Pins = ::prtn::pin::layout(
+            ::prtn::pin::bind(PinId::I2cSda, GPIO_NUM_4, ::prtn::pin::Role::I2cSda),
+            ::prtn::pin::bind(PinId::I2cScl, GPIO_NUM_5, ::prtn::pin::Role::I2cScl));
+
         constexpr uint32_t    IicFrequency   = IIC::DefaultFrequency;
         constexpr uint8_t     MpuAddress     = I2C_MPU6050::MPU6050_ADDR_LOW;
         constexpr TickType_t  TaskPeriodMs   = 50;
@@ -57,7 +65,7 @@ namespace MPU6050Example
 
             dvc::Serial          serial {AppConfig::Hardware::SerialBaudrate};
             SerialConsoleService console {serial};
-            IIC                  iic {SdaPin, SclPin, IicFrequency};
+            IIC                  iic {Pins[PinId::I2cSda], Pins[PinId::I2cScl], IicFrequency};
             I2C_MPU6050          mpu {MpuAddress, iic, MpuCfg};
 
             TaskHandle_t taskHandle = nullptr;
@@ -161,8 +169,8 @@ namespace MPU6050Example
         app.console.setup();
         app.console.printBootBanner(app.nodeInfo);
         app.console.info("MPU6050 IIC: sda=%u scl=%u freq=%lu addr=0x%02X",
-                         static_cast<unsigned>(Detail::SdaPin),
-                         static_cast<unsigned>(Detail::SclPin),
+                         static_cast<unsigned>(Detail::Pins[Detail::PinId::I2cSda]),
+                         static_cast<unsigned>(Detail::Pins[Detail::PinId::I2cScl]),
                          static_cast<unsigned long>(Detail::IicFrequency),
                          static_cast<unsigned>(Detail::MpuAddress));
 

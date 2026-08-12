@@ -4,6 +4,7 @@
 #include "src/fw/inc/RMT.h"
 #include "src/fw/inc/std_err.h"
 #include "src/fw/inc/Result.h"
+#include "src/alg/inc/alg_color.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -27,14 +28,6 @@ public:
         BGR,
     };
 
-    struct Color
-    {
-        uint8_t r = 0;
-        uint8_t g = 0;
-        uint8_t b = 0;
-        uint8_t a = 255;
-    };
-
     struct Config
     {
         size_t     pixelCount    = 1;
@@ -51,32 +44,16 @@ public:
 
     enum class Detail : uint8_t
     {
-        NONE = 0,
-        NOT_STARTED,
+        NOT_STARTED = 1,
         ALREADY_STARTED,
         INVALID_CONFIG,
         INVALID_INDEX,
+        ALLOCATE_BUFFER_FAILED,
         NO_BUFFER,
         SETUP_RMT_FAILED,
         END_RMT_FAILED,
         RMT_TRANSMIT_FAILED,
         RMT_WAIT_FAILED,
-    };
-
-    struct Error
-    {
-        StdError   code   = StdError::OK;
-        Detail     detail = Detail::NONE;
-        RMT::Error rmt {};
-        esp_err_t  native = ESP_OK;
-
-        constexpr bool ok() const noexcept {
-            return code == StdError::OK && detail == Detail::NONE && rmt.ok() && native == ESP_OK;
-        }
-
-        constexpr explicit operator bool() const noexcept {
-            return ok();
-        }
     };
 
 public:
@@ -89,8 +66,9 @@ public:
 
     // the Result defines
     using SetupErrors     = ErrorSet<WS2812::Detail::ALREADY_STARTED,
-                                     WS2812::Detail::NO_BUFFER,
+                                     WS2812::Detail::ALLOCATE_BUFFER_FAILED,
                                      WS2812::Detail::INVALID_CONFIG,
+                                     WS2812::Detail::NO_BUFFER,
                                      Detail::SETUP_RMT_FAILED>;
     using SetupResult     = Result<void, SetupErrors>;
     using EndResult       = Result<void, ErrorSet<Detail::NOT_STARTED, Detail::END_RMT_FAILED>>;
@@ -114,7 +92,7 @@ public:
     using SetPixelResult       = Result<void, ErrorSet<WS2812::Detail::INVALID_INDEX, WS2812::Detail::NO_BUFFER>>;
     using SetColorResult       = SetPixelResult;
     using SetAllColorsResult   = Result<void, ErrorSet<WS2812::Detail::NO_BUFFER>>;
-    using SetSingleColorResult = Result<void, ErrorSet<WS2812::Detail::INVALID_INDEX>>;
+    using SetSingleColorResult = SetPixelResult;
     using SetAlphaResult       = SetPixelResult;
     using SetBrightnessErrors  = ShowErrors;
     using SetBrightnessResult  = Result<void, SetBrightnessErrors>;
@@ -131,9 +109,7 @@ public:
     [[nodiscard]] size_t  pixelCount() const;
     [[nodiscard]] uint8_t brightness() const;
     [[nodiscard]] Color   pixel(size_t index) const;
-    [[nodiscard]] Error   lastError() const;
 
-    static const char* detailName(Detail detail) noexcept;
     static const char* colorOrderName(ColorOrder order) noexcept;
 
 private:
@@ -144,7 +120,6 @@ private:
     RMT::Symbol* m_symbols     = nullptr;
     size_t       m_symbolCount = 0;
     bool         m_started     = false;
-    Error        m_lastError {};
 
 private:
     using AllocateBufferErrors = ErrorSet<StdError::NO_MEM>;
@@ -158,10 +133,6 @@ private:
     void                               orderedBytes(Color color, uint8_t& first, uint8_t& second, uint8_t& third) const;
     [[nodiscard]] Color                scaled(Color color) const;
 
-    [[nodiscard]] Error makeError(StdError code, Detail detail, esp_err_t native = ESP_OK, RMT::Error rmt = {});
-    [[nodiscard]] Error mapRmtError(RMT::Error rmt, Detail detail);
-
-    void               clearError();
     [[nodiscard]] bool validConfig() const;
     [[nodiscard]] bool validIndex(size_t index) const;
 

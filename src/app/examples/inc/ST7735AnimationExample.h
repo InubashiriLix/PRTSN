@@ -21,42 +21,23 @@ namespace ST7735AnimationExample
 {
     namespace Detail
     {
-        struct St7735ResetOwner;
-        struct St7735SckOwner;
-        struct St7735MosiOwner;
-        struct St7735CsOwner;
-        struct St7735DcOwner;
-        struct St7735BacklightOwner;
-
-        constexpr auto ResetPin = PRTN_REG_PIN__(
-            St7735ResetOwner,
-            ::prtn::b::gpio::gpio1);
-        constexpr auto SckPin = PRTN_REG_PIN__(
-            St7735SckOwner,
-            ::prtn::b::spi::sck);
-        constexpr auto MosiPin = PRTN_REG_PIN__(
-            St7735MosiOwner,
-            ::prtn::b::spi::mosi);
-        constexpr auto CsPin = PRTN_REG_PIN__(
-            St7735CsOwner,
-            ::prtn::b::spi::cs);
-        constexpr auto DcPin = PRTN_REG_PIN__(
-            St7735DcOwner,
-            ::prtn::b::gpio::gpio0);
-        constexpr auto BacklightPin = PRTN_REG_PIN__(
-            St7735BacklightOwner,
-            ::prtn::b::gpio::gpio10);
-
-        constexpr auto PinClaims = std::array {
-            PRTN_PIN_CLAIM__(ResetPin, ::prtn::pin::PinUse::Exclusive, "DigitalOut"),
-            PRTN_PIN_CLAIM__(SckPin, ::prtn::pin::PinUse::Exclusive, "SpiSck"),
-            PRTN_PIN_CLAIM__(MosiPin, ::prtn::pin::PinUse::Exclusive, "SpiMosi"),
-            PRTN_PIN_CLAIM__(CsPin, ::prtn::pin::PinUse::Exclusive, "SpiCs"),
-            PRTN_PIN_CLAIM__(DcPin, ::prtn::pin::PinUse::Exclusive, "DigitalOut"),
-            PRTN_PIN_CLAIM__(BacklightPin, ::prtn::pin::PinUse::Exclusive, "DigitalOut"),
+        enum class PinId : uint8_t
+        {
+            Reset,
+            Sck,
+            Mosi,
+            Cs,
+            Dc,
+            Backlight,
         };
 
-        static_assert(::prtn::pin::validatePinClaims(PinClaims), "ST7735AnimationExample has conflicting pin claims");
+        inline constexpr auto Pins = ::prtn::pin::layout(
+            ::prtn::pin::bind(PinId::Reset, GPIO_NUM_1, ::prtn::pin::Role::Output),
+            ::prtn::pin::bind(PinId::Sck, GPIO_NUM_36, ::prtn::pin::Role::SpiSck),
+            ::prtn::pin::bind(PinId::Mosi, GPIO_NUM_37, ::prtn::pin::Role::SpiMosi),
+            ::prtn::pin::bind(PinId::Cs, GPIO_NUM_35, ::prtn::pin::Role::SpiCs),
+            ::prtn::pin::bind(PinId::Dc, GPIO_NUM_0, ::prtn::pin::Role::Output),
+            ::prtn::pin::bind(PinId::Backlight, GPIO_NUM_10, ::prtn::pin::Role::Output));
 
         constexpr uint32_t SpiClockHz     = 20 * 1000 * 1000;
         constexpr size_t   DeviceIndex    = 0;
@@ -70,9 +51,9 @@ namespace ST7735AnimationExample
         inline SPI::BusConfig makeBusConfig() {
             SPI::BusConfig config {};
             config.host                = SPI2_HOST;
-            config.bus.mosi_io_num     = MosiPin.number();
+            config.bus.mosi_io_num     = Pins[PinId::Mosi];
             config.bus.miso_io_num     = -1;
-            config.bus.sclk_io_num     = SckPin.number();
+            config.bus.sclk_io_num     = Pins[PinId::Sck];
             config.bus.quadwp_io_num   = -1;
             config.bus.quadhd_io_num   = -1;
             config.bus.max_transfer_sz = DmaBufferBytes;
@@ -86,7 +67,7 @@ namespace ST7735AnimationExample
             config.index                 = DeviceIndex;
             config.device.clock_speed_hz = SpiClockHz;
             config.device.mode           = 0;
-            config.device.spics_io_num   = CsPin.number();
+            config.device.spics_io_num   = Pins[PinId::Cs];
             config.device.queue_size     = 4;
             return config;
         }
@@ -94,9 +75,9 @@ namespace ST7735AnimationExample
         inline ST7735::Config makeLcdConfig() {
             ST7735::Config config       = ST7735::makeConfig(LcdOrientation);
             config.dmaBufferBytes       = DmaBufferBytes;
-            config.resetPin             = ResetPin.gpioNum();
-            config.dcPin                = DcPin.gpioNum();
-            config.backlightPin         = BacklightPin.gpioNum();
+            config.resetPin             = Pins[PinId::Reset];
+            config.dcPin                = Pins[PinId::Dc];
+            config.backlightPin         = Pins[PinId::Backlight];
             config.useResetPin          = true;
             config.useBacklightPin      = true;
             config.autoDmaBuffer        = true;
@@ -319,12 +300,12 @@ namespace ST7735AnimationExample
         app.console.setup();
         app.console.printBootBanner(app.nodeInfo);
         app.console.info("ST7735 SPI pins: scl/sck=%d sda/mosi=%d cs=%d res=%d dc=%d bl=%d clock=%lu",
-                         Detail::SckPin,
-                         Detail::MosiPin,
-                         Detail::CsPin,
-                         Detail::ResetPin,
-                         Detail::DcPin,
-                         Detail::BacklightPin,
+                         Detail::Pins[Detail::PinId::Sck],
+                         Detail::Pins[Detail::PinId::Mosi],
+                         Detail::Pins[Detail::PinId::Cs],
+                         Detail::Pins[Detail::PinId::Reset],
+                         Detail::Pins[Detail::PinId::Dc],
+                         Detail::Pins[Detail::PinId::Backlight],
                          static_cast<unsigned long>(Detail::SpiClockHz));
         app.console.info("ST7735 GIF: orientation=%s size=%ux%u frames=%u fps=%u frameBytes=%u",
                          ST7735::orientationName(Detail::LcdOrientation),

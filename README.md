@@ -92,6 +92,9 @@ BUILD_DEFINES += -DPRTN_NODE_PROFILE=PRTN_NODE_PROFILE_AMA10
 
 Most runtime defaults live in `src/cfg/AppConfig.h` or in the owning class as `static constexpr` defaults.
 
+GPIO ownership and compile-time pin conflict checks are documented in
+[docs/pin-layout.md](docs/pin-layout.md)（包含中文调用说明）.
+
 ```bash
 make check
 make build

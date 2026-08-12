@@ -25,19 +25,22 @@ WS2812::SetupResult WS2812::setup() {
 
     const AllocateBufferResult allocateResult = allocateBuffers();
     if (allocateResult.is_err())
-        return Err<Detail::NO_BUFFER>();
+        return allocateResult.propagate<Detail::ALLOCATE_BUFFER_FAILED>(
+            "WS2812 buffer allocation failed");
 
     const RMT::Error rmtResult = m_rmt.setup();
     if (!rmtResult) {
         releaseBuffers();
-        return Err<Detail::SETUP_RMT_FAILED>();
+        return Err<Detail::SETUP_RMT_FAILED>(
+            "WS2812 RMT setup failed",
+            error_cause("RMT", static_cast<std::int32_t>(rmtResult.native), RMT::detailName(rmtResult.detail)));
     }
 
     const ClearResult clearResult = clear();
     if (clearResult.is_err()) {
         (void)m_rmt.end();
         releaseBuffers();
-        return Err(clearResult.error());
+        return clearResult.propagate();
     }
 
     m_started = true;
@@ -50,14 +53,15 @@ WS2812::EndResult WS2812::end() {
         return Err<Detail::NOT_STARTED>();
     }
 
-    RMT::Error rmtErr = m_rmt.end();
+    const RMT::Error rmtErr = m_rmt.end();
     if (!rmtErr) {
-        return Err<Detail::END_RMT_FAILED>();
+        return Err<Detail::END_RMT_FAILED>(
+            "WS2812 RMT shutdown failed",
+            error_cause("RMT", static_cast<std::int32_t>(rmtErr.native), RMT::detailName(rmtErr.detail)));
     }
 
     m_started = false;
     releaseBuffers();
-    clearError();
     return Ok();
 }
 
@@ -71,13 +75,16 @@ WS2812::ShowResult WS2812::show() {
 
     RMT::Error rmtErr = m_rmt.transmit(m_symbols, m_symbolCount);
     if (!rmtErr)
-        return Err<Detail::RMT_TRANSMIT_FAILED>();
+        return Err<Detail::RMT_TRANSMIT_FAILED>(
+            "WS2812 RMT transmit failed",
+            error_cause("RMT", static_cast<std::int32_t>(rmtErr.native), RMT::detailName(rmtErr.detail)));
 
     rmtErr = m_rmt.waitDone(m_config.showTimeoutMs);
     if (!rmtErr)
-        return Err<Detail::RMT_WAIT_FAILED>();
+        return Err<Detail::RMT_WAIT_FAILED>(
+            "WS2812 RMT wait failed",
+            error_cause("RMT", static_cast<std::int32_t>(rmtErr.native), RMT::detailName(rmtErr.detail)));
 
-    clearError();
     return Ok();
 }
 
@@ -87,14 +94,13 @@ WS2812::ClearResult WS2812::clear() {
     }
 
     std::memset(m_pixels, 0, sizeof(Color) * m_config.pixelCount);
-    clearError();
     return Ok();
 }
 
 WS2812::ClearShowResult WS2812::clearShow() {
     const ClearResult clearResult = clear();
     if (clearResult.is_err()) {
-        return Err(clearResult.error());
+        return clearResult.propagate();
     }
 
     return show();
@@ -107,7 +113,6 @@ WS2812::SetPixelResult WS2812::setPixel(size_t index, Color color) {
         return Err<Detail::NO_BUFFER>();
 
     m_pixels[index] = color;
-    clearError();
     return Ok();
 }
 
@@ -124,7 +129,6 @@ WS2812::SetAllColorsResult WS2812::setAllColors(uint8_t r, uint8_t g, uint8_t b,
         m_pixels[i] = color;
     }
 
-    clearError();
     return Ok();
 }
 
@@ -132,8 +136,11 @@ WS2812::SetSingleColorResult WS2812::setRed(uint8_t r, size_t index) {
     if (!validIndex(index)) {
         return Err<Detail::INVALID_INDEX>();
     }
+    if (m_pixels == nullptr) {
+        return Err<Detail::NO_BUFFER>();
+    }
+
     m_pixels[index].r = r;
-    clearError();
     return Ok();
 }
 
@@ -141,8 +148,11 @@ WS2812::SetSingleColorResult WS2812::setGreen(uint8_t g, size_t index) {
     if (!validIndex(index)) {
         return Err<Detail::INVALID_INDEX>();
     }
+    if (m_pixels == nullptr) {
+        return Err<Detail::NO_BUFFER>();
+    }
+
     m_pixels[index].g = g;
-    clearError();
     return Ok();
 }
 
@@ -150,8 +160,11 @@ WS2812::SetSingleColorResult WS2812::setBlue(uint8_t b, size_t index) {
     if (!validIndex(index)) {
         return Err<Detail::INVALID_INDEX>();
     }
+    if (m_pixels == nullptr) {
+        return Err<Detail::NO_BUFFER>();
+    }
+
     m_pixels[index].b = b;
-    clearError();
     return Ok();
 }
 
@@ -162,7 +175,6 @@ WS2812::SetAlphaResult WS2812::setAlpha(uint8_t a, size_t index) {
         return Err<Detail::NO_BUFFER>();
 
     m_pixels[index].a = a;
-    clearError();
     return Ok();
 }
 
@@ -171,7 +183,6 @@ WS2812::SetBrightnessResult WS2812::setBrightness(uint8_t brightness, bool flush
     if (flush)
         return show();
 
-    clearError();
     return Ok();
 }
 
@@ -193,37 +204,6 @@ WS2812::Color WS2812::pixel(size_t index) const {
     }
 
     return m_pixels[index];
-}
-
-WS2812::Error WS2812::lastError() const {
-    return m_lastError;
-}
-
-const char* WS2812::detailName(Detail detail) noexcept {
-    switch (detail) {
-        case Detail::NONE:
-            return "NONE";
-        case Detail::NOT_STARTED:
-            return "NOT_STARTED";
-        case Detail::ALREADY_STARTED:
-            return "ALREADY_STARTED";
-        case Detail::INVALID_CONFIG:
-            return "INVALID_CONFIG";
-        case Detail::INVALID_INDEX:
-            return "INVALID_INDEX";
-        case Detail::NO_BUFFER:
-            return "NO_BUFFER";
-        case Detail::SETUP_RMT_FAILED:
-            return "SETUP_RMT_FAILED";
-        case Detail::END_RMT_FAILED:
-            return "END_RMT_FAILED";
-        case Detail::RMT_TRANSMIT_FAILED:
-            return "RMT_TRANSMIT_FAILED";
-        case Detail::RMT_WAIT_FAILED:
-            return "RMT_WAIT_FAILED";
-    }
-
-    return "UNKNOWN";
 }
 
 const char* WS2812::colorOrderName(ColorOrder order) noexcept {
@@ -260,7 +240,6 @@ WS2812::AllocateBufferResult WS2812::allocateBuffers() {
     }
 
     std::memset(m_pixels, 0, pixelBytes);
-    clearError();
     return Ok();
 }
 
@@ -341,19 +320,6 @@ WS2812::Color WS2812::scaled(Color color) const {
     color.g              = static_cast<uint8_t>((static_cast<uint16_t>(color.g) * scale) / 65025U);
     color.b              = static_cast<uint8_t>((static_cast<uint16_t>(color.b) * scale) / 65025U);
     return color;
-}
-
-WS2812::Error WS2812::makeError(StdError code, Detail detail, esp_err_t native, RMT::Error rmt) {
-    m_lastError = Error {.code = code, .detail = detail, .rmt = rmt, .native = native};
-    return m_lastError;
-}
-
-WS2812::Error WS2812::mapRmtError(RMT::Error rmt, Detail detail) {
-    return makeError(rmt.code, detail, rmt.native, rmt);
-}
-
-void WS2812::clearError() {
-    m_lastError = Error {};
 }
 
 bool WS2812::validConfig() const {

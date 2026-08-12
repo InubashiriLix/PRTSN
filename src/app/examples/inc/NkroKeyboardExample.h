@@ -22,6 +22,30 @@ namespace NkroKeyboardExample
 {
     namespace Detail
     {
+        enum class PinId : uint8_t
+        {
+            Row0,
+            Row1,
+            Row2,
+            Row3,
+            Row4,
+            Col0,
+            Col1,
+            Col2,
+            Col3,
+        };
+
+        inline constexpr auto Pins = ::prtn::pin::layout(
+            ::prtn::pin::bind(PinId::Row0, GPIO_NUM_39, ::prtn::pin::Role::InputPulldown),
+            ::prtn::pin::bind(PinId::Row1, GPIO_NUM_38, ::prtn::pin::Role::InputPulldown),
+            ::prtn::pin::bind(PinId::Row2, GPIO_NUM_37, ::prtn::pin::Role::InputPulldown),
+            ::prtn::pin::bind(PinId::Row3, GPIO_NUM_36, ::prtn::pin::Role::InputPulldown),
+            ::prtn::pin::bind(PinId::Row4, GPIO_NUM_35, ::prtn::pin::Role::InputPulldown),
+            ::prtn::pin::bind(PinId::Col0, GPIO_NUM_2, ::prtn::pin::Role::Output),
+            ::prtn::pin::bind(PinId::Col1, GPIO_NUM_42, ::prtn::pin::Role::Output),
+            ::prtn::pin::bind(PinId::Col2, GPIO_NUM_41, ::prtn::pin::Role::Output),
+            ::prtn::pin::bind(PinId::Col3, GPIO_NUM_40, ::prtn::pin::Role::Output));
+
         constexpr size_t      RowCount       = 5;
         constexpr size_t      ColCount       = 4;
         constexpr uint32_t    TaskStackBytes = 4096;
@@ -66,9 +90,9 @@ namespace NkroKeyboardExample
                 .debounceMs         = 20,
                 .longPressMs        = 600,
                 .activeLevel        = StdPinLevel::High,
-                .rowPins            = {39, 38, 37, 36, 35},
+                .rowPins            = {Pins[PinId::Row0], Pins[PinId::Row1], Pins[PinId::Row2], Pins[PinId::Row3], Pins[PinId::Row4]},
                 .rowPinMode         = StdPinFunc::InputPulldown,
-                .colPins            = {2, 42, 41, 40},
+                .colPins            = {Pins[PinId::Col0], Pins[PinId::Col1], Pins[PinId::Col2], Pins[PinId::Col3]},
                 .colPinMode         = StdPinFunc::Output,
                 .KeyStateMatrix     = keyStateMatrix,
                 .KeyIdMapMatrix     = keyIdMapMatrix,

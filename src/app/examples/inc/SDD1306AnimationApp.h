@@ -22,6 +22,16 @@ namespace SSD1306AnimationApp
 {
     namespace Detail
     {
+        enum class PinId : uint8_t
+        {
+            I2cSda,
+            I2cScl,
+        };
+
+        inline constexpr auto Pins = ::prtn::pin::layout(
+            ::prtn::pin::bind(PinId::I2cSda, GPIO_NUM_4, ::prtn::pin::Role::I2cSda),
+            ::prtn::pin::bind(PinId::I2cScl, GPIO_NUM_5, ::prtn::pin::Role::I2cScl));
+
         constexpr TickType_t  TaskPeriodTicks      = pdMS_TO_TICKS(10);
         constexpr uint32_t    TaskStackWords       = 4096;
         constexpr UBaseType_t TaskPriority         = 4;
@@ -50,7 +60,7 @@ namespace SSD1306AnimationApp
             dvc::Serial          serial {AppConfig::Hardware::SerialBaudrate};
             SerialConsoleService console {serial};
 
-            IIC     iic {IIC::DefaultSdaPin, IIC::DefaultSclPin, IIC::DefaultFrequency};
+            IIC     iic {Pins[PinId::I2cSda], Pins[PinId::I2cScl], IIC::DefaultFrequency};
             SSD1306 oled {iic, SSD1306::DefaultAddress};
 
             TaskHandle_t taskHandle = nullptr;

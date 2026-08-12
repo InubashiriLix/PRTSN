@@ -46,22 +46,22 @@ public:
     NkroKeyboard();
     ~NkroKeyboard();
 
-    Result<void, StdError> setup();
-    Result<void, StdError> end();
-    Result<bool, StdError> ready();
+    Result<void, StdErrors> setup();
+    Result<void, StdErrors> end();
+    Result<bool, StdErrors> ready();
 
 #define PRTN_TEST_USAGE_METHOD [[deprecated("test-only API sends HID reports immediately; use NkroKeyboardService::update() for batched state updates")]]
-    PRTN_TEST_USAGE_METHOD Result<void, StdError> press(uint8_t usage);
-    PRTN_TEST_USAGE_METHOD Result<void, StdError> release(uint8_t usage);
-    PRTN_TEST_USAGE_METHOD Result<void, StdError> releaseAll();
+    PRTN_TEST_USAGE_METHOD Result<void, StdErrors> press(uint8_t usage);
+    PRTN_TEST_USAGE_METHOD Result<void, StdErrors> release(uint8_t usage);
+    PRTN_TEST_USAGE_METHOD Result<void, StdErrors> releaseAll();
 #undef PRTN_TEST_USAGE_METHOD
 
-    Result<void, StdError> updateKeyboardState(const uint8_t* usageBitmap, size_t usageBitmapSize);
+    Result<void, StdErrors> updateKeyboardState(const uint8_t* usageBitmap, size_t usageBitmapSize);
 
-    Result<void, StdError> pressConsumer(uint16_t usage);
-    Result<void, StdError> releaseConsumer();
-    Result<void, StdError> pressSystem(uint8_t bit);
-    Result<void, StdError> releaseSystem();
+    Result<void, StdErrors> pressConsumer(uint16_t usage);
+    Result<void, StdErrors> releaseConsumer();
+    Result<void, StdErrors> pressSystem(uint8_t bit);
+    Result<void, StdErrors> releaseSystem();
 
     uint16_t lookupUsage(uint8_t slot) const;
     void     resetKeyMapping();
@@ -87,9 +87,9 @@ private:
     uint16_t      m_key_mapping[prt_hid::HID_FEATURE_MAX_SLOTS] {};
     FeatureReport m_pending_request {};
 
-    Result<void, StdError> sendKeyboard();
-    Result<void, StdError> sendConsumer();
-    Result<void, StdError> sendSystem();
+    Result<void, StdErrors> sendKeyboard();
+    Result<void, StdErrors> sendConsumer();
+    Result<void, StdErrors> sendSystem();
 
     inline static bool isModifier(uint8_t usage);
     inline static void clearBit(uint8_t* bitmap, uint8_t usage);

@@ -37,21 +37,21 @@ struct Matrix
     [[deprecated("getPtr exposes internal storage; prefer get(), getCopy(), set(), or replace().")]]
     Result<T*, MatrixError> getPtr(size_t i, size_t j) {
         if (checkOutofBoundary(i, j)) {
-            return Err(MatrixError::INDEX_OUT_OF_BOUNDS);
+            return Err<MatrixErrorCode::INDEX_OUT_OF_BOUNDS>("Matrix index is out of bounds");
         }
         return Ok(&data[i][j]);
     }
 
     [[nodiscard]] Result<const T*, MatrixError> getRef(size_t i, size_t j) const {
         if (checkOutofBoundary(i, j)) {
-            return Err(MatrixError::INDEX_OUT_OF_BOUNDS);
+            return Err<MatrixErrorCode::INDEX_OUT_OF_BOUNDS>("Matrix index is out of bounds");
         }
         return Ok(&data[i][j]);
     }
 
     Result<T, MatrixError> getCopy(size_t i, size_t j) const {
         if (checkOutofBoundary(i, j)) {
-            return Err(MatrixError::INDEX_OUT_OF_BOUNDS);
+            return Err<MatrixErrorCode::INDEX_OUT_OF_BOUNDS>("Matrix index is out of bounds");
         }
         return Ok(data[i][j]);
     }
@@ -59,7 +59,7 @@ struct Matrix
     Result<T, MatrixError> set(size_t i, size_t j, const T value) { // move or copy dependending on user's hehaviour
         auto temp = getCopy(i, j);
         if (temp.is_err()) {
-            return Err(temp.unwrap_err());
+            return temp.propagate();
         }
         data[i][j] = value;
         return Ok(temp.unwrap());
@@ -82,11 +82,11 @@ struct Matrix
     Result<void, MatrixError> swap(size_t i1, size_t j1, size_t i2, size_t j2) {
         auto temp1 = getCopy(i1, j1);
         if (temp1.is_err()) {
-            return Err(temp1.unwrap_err());
+            return temp1.propagate();
         }
         auto temp2 = getCopy(i2, j2);
         if (temp2.is_err()) {
-            return Err(temp2.unwrap_err());
+            return temp2.propagate();
         }
         data[i1][j1] = temp2.unwrap();
         data[i2][j2] = temp1.unwrap();

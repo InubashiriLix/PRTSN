@@ -1,13 +1,14 @@
 #pragma once
 
 #include <cstdint>
+#include "driver/gpio.h"
 #include "esp32-hal-gpio.h"
 
 class LED
 {
 public:
-    static constexpr uint8_t DefaultMainPin = 12;
-    static constexpr uint8_t DefaultAuxPin  = 13;
+    static constexpr gpio_num_t DefaultMainPin = GPIO_NUM_12;
+    static constexpr gpio_num_t DefaultAuxPin  = GPIO_NUM_13;
 
     enum class State : uint8_t
     {
@@ -16,11 +17,11 @@ public:
     };
 
 private:
-    uint8_t m_pin;
-    State   m_state;
+    gpio_num_t m_pin;
+    State      m_state;
 
 public:
-    LED(uint8_t pin, State ledInitState = State::DIGITAL_HIGH);
+    LED(gpio_num_t pin, State ledInitState = State::DIGITAL_HIGH);
     bool  setup();
     State getState();
     State setState(State state);

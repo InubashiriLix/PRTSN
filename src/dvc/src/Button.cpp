@@ -1,15 +1,15 @@
 #include "../inc/Button.h"
 
-Button::Button(uint8_t pin, uint8_t activeLevel, uint8_t inputMode, uint32_t debounceMs)
+Button::Button(gpio_num_t pin, uint8_t activeLevel, uint8_t inputMode, uint32_t debounceMs)
     : m_pin(pin),
       m_activeLevel(activeLevel),
       m_inputMode(inputMode),
       m_debounceMs(debounceMs) {}
 
 bool Button::setup() {
-    pinMode(m_pin, m_inputMode);
+    pinMode(static_cast<uint8_t>(m_pin), m_inputMode);
 
-    const uint8_t  rawLevel = static_cast<uint8_t>(digitalRead(m_pin));
+    const uint8_t  rawLevel = static_cast<uint8_t>(digitalRead(static_cast<uint8_t>(m_pin)));
     const uint32_t nowMs    = millis();
 
     m_lastRawLevel      = rawLevel;
@@ -26,7 +26,7 @@ bool Button::setupInterrupt(Callback callback, void* context, int interruptMode)
     }
 
     setCallback(callback, context);
-    attachInterruptArg(m_pin, interruptEntry, this, interruptMode);
+    attachInterruptArg(static_cast<uint8_t>(m_pin), interruptEntry, this, interruptMode);
     m_interruptEnabled = true;
 
     return true;
@@ -34,7 +34,7 @@ bool Button::setupInterrupt(Callback callback, void* context, int interruptMode)
 
 void Button::detachInterruptMode() {
     if (m_interruptEnabled) {
-        detachInterrupt(m_pin);
+        detachInterrupt(static_cast<uint8_t>(m_pin));
     }
 
     m_interruptEnabled = false;
@@ -51,7 +51,7 @@ void Button::update() {
         m_lastInterruptMs = millis();
     }
 
-    const uint8_t  rawLevel = static_cast<uint8_t>(digitalRead(m_pin));
+    const uint8_t  rawLevel = static_cast<uint8_t>(digitalRead(static_cast<uint8_t>(m_pin)));
     const uint32_t nowMs    = millis();
 
     if (rawLevel != m_lastRawLevel) {
@@ -120,7 +120,7 @@ bool Button::isReleased() const {
     return m_state == State::RELEASED;
 }
 
-uint8_t Button::pin() const {
+gpio_num_t Button::pin() const {
     return m_pin;
 }
 

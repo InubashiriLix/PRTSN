@@ -32,13 +32,13 @@ public:
     explicit NkroKeyboardService(Config& config)
         : m_config(config) {}
 
-    Result<void, StdError> setup() {
+    Result<void, StdErrors> setup() {
         if (m_initialized) {
-            return Err(StdError::INVALID_STATE);
+            return Err<StdError::INVALID_STATE>();
         }
         if (m_config.longPressMs == 0 || m_config.scanDevice.getRowNum() != RowNums || m_config.scanDevice.getColNum() != ColNums ||
             m_config.scanDevice.slotCount() != RowNums * ColNums) {
-            return Err(StdError::INVALID_ARGUMENT);
+            return Err<StdError::INVALID_ARGUMENT>();
         }
 
         auto result = m_config.scanDevice.setup();
@@ -58,9 +58,9 @@ public:
         return Ok();
     }
 
-    Result<void, StdError> end() {
+    Result<void, StdErrors> end() {
         if (!m_initialized) {
-            return Err(StdError::INVALID_STATE);
+            return Err<StdError::INVALID_STATE>();
         }
 
         uint8_t emptyUsageBitmap[NkroKeyboard::KEY_USAGE_BITMAP_SIZE] {};
@@ -82,9 +82,9 @@ public:
         return firstError;
     }
 
-    Result<void, StdError> reset() {
+    Result<void, StdErrors> reset() {
         if (!m_initialized) {
-            return Err(StdError::INVALID_STATE);
+            return Err<StdError::INVALID_STATE>();
         }
 
         auto result = m_config.scanDevice.reset();
@@ -103,21 +103,21 @@ public:
         return Ok();
     }
 
-    Result<void, StdError> update() {
+    Result<void, StdErrors> update() {
         if (!m_initialized) {
-            return Err(StdError::INVALID_STATE);
+            return Err<StdError::INVALID_STATE>();
         }
 
         auto scanResult = m_config.scanDevice.scan();
         if (scanResult.is_err()) {
-            return Err(scanResult.unwrap_err());
+            return scanResult.propagate();
         }
 
         const KeyboardScanFrame frame              = scanResult.unwrap();
         const size_t            requiredBitmapSize = (RowNums * ColNums + 7) / 8;
         if (frame.pressedBitmap == nullptr || frame.pressedBitmapSize < requiredBitmapSize || frame.rows != RowNums || frame.cols != ColNums ||
             frame.slotCount != RowNums * ColNums) {
-            return Err(StdError::INVALID_RESPONSE);
+            return Err<StdError::INVALID_RESPONSE>();
         }
 
         uint8_t usageBitmap[NkroKeyboard::KEY_USAGE_BITMAP_SIZE] {};
@@ -140,7 +140,7 @@ public:
                 }
                 if (usage > prt_hid::KEY_ID_NKRO_MAX &&
                     (usage < prt_hid::KEY_ID_MODIFIERS_START || usage > prt_hid::KEY_ID_MODIFIERS_END)) {
-                    return Err(StdError::INVALID_ARGUMENT);
+                    return Err<StdError::INVALID_ARGUMENT>();
                 }
                 usageBitmap[usage >> 3] |= static_cast<uint8_t>(1u << (usage & 0x07));
             }
@@ -148,7 +148,7 @@ public:
 
         const auto readyResult = m_config.keyboard.ready();
         if (readyResult.is_err()) {
-            return Err(readyResult.unwrap_err());
+            return readyResult.propagate();
         }
         if (!readyResult.unwrap()) {
             m_hidWasReady = false;
@@ -172,21 +172,21 @@ public:
         return Ok();
     }
 
-    Result<prt_hid::KeyId, StdError> setShortKey(uint16_t slot, prt_hid::KeyId keyId) {
+    Result<prt_hid::KeyId, StdErrors> setShortKey(uint16_t slot, prt_hid::KeyId keyId) {
         return setKeyMapping(m_config.KeyIdMapMatrix, slot, keyId);
     }
 
-    Result<prt_hid::KeyId, StdError> setLongKey(uint16_t slot, prt_hid::KeyId keyId) {
+    Result<prt_hid::KeyId, StdErrors> setLongKey(uint16_t slot, prt_hid::KeyId keyId) {
         return setKeyMapping(m_config.LongKeyIdMapMatrix, slot, keyId);
     }
 
 private:
-    Result<prt_hid::KeyId, StdError> setKeyMapping(Matrix<RowNums, ColNums, prt_hid::KeyId>& keyMap, uint16_t slot, prt_hid::KeyId keyId) {
+    Result<prt_hid::KeyId, StdErrors> setKeyMapping(Matrix<RowNums, ColNums, prt_hid::KeyId>& keyMap, uint16_t slot, prt_hid::KeyId keyId) {
         const uint8_t usage = static_cast<uint8_t>(keyId);
         if (slot >= RowNums * ColNums ||
             (keyId != prt_hid::KeyId::None && usage > prt_hid::KEY_ID_NKRO_MAX &&
              (usage < prt_hid::KEY_ID_MODIFIERS_START || usage > prt_hid::KEY_ID_MODIFIERS_END))) {
-            return Err(StdError::INVALID_ARGUMENT);
+            return Err<StdError::INVALID_ARGUMENT>();
         }
 
         const size_t row           = slot / ColNums;
