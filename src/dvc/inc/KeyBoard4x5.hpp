@@ -17,10 +17,10 @@ public:
         uint32_t    debounceMs         = 20;
         uint32_t    longPressMs        = 600;
         StdPinLevel activeLevel        = StdPinLevel::High;
-        uint8_t     colPins[MaxColNum] = {12, 18, 19};
+        gpio_num_t  colPins[MaxColNum] = {GPIO_NUM_12, GPIO_NUM_18, GPIO_NUM_19};
         StdPinFunc  colPinMode         = StdPinFunc::Output;
         uint8_t     colNum             = 3;
-        uint8_t     rowPins[MaxRowNum] = {2, 3, 10};
+        gpio_num_t  rowPins[MaxRowNum] = {GPIO_NUM_2, GPIO_NUM_3, GPIO_NUM_10};
         StdPinFunc  rowPinMode         = StdPinFunc::InputPulldown;
         uint8_t     rowNum             = 3;
     };

@@ -18,6 +18,16 @@ namespace EspNowEchoApp
 {
     namespace Detail
     {
+        enum class PinId : uint8_t
+        {
+            LedMain,
+            LedAux,
+        };
+
+        inline constexpr auto Pins = ::prtn::pin::layout(
+            ::prtn::pin::bind(PinId::LedMain, GPIO_NUM_12, ::prtn::pin::Role::Output),
+            ::prtn::pin::bind(PinId::LedAux, GPIO_NUM_13, ::prtn::pin::Role::Output));
+
         constexpr TickType_t  TaskPeriodTicks = pdMS_TO_TICKS(AppConfig::Runtime::AppLoopIntervalMs);
         constexpr uint32_t    TaskStackWords  = AppConfig::Runtime::EspNowTaskStackWords;
         constexpr UBaseType_t TaskPriority    = AppConfig::Runtime::EspNowTaskPriority;
@@ -36,8 +46,8 @@ namespace EspNowEchoApp
 
             dvc::Serial          serial {AppConfig::Hardware::SerialBaudrate};
             SerialConsoleService console {serial};
-            LED                  ledMain {AppConfig::Hardware::LedMainPin, LED::State::DIGITAL_HIGH};
-            LED                  ledAux {AppConfig::Hardware::LedAuxPin, LED::State::DIGITAL_LOW};
+            LED                  ledMain {Pins[PinId::LedMain], LED::State::DIGITAL_HIGH};
+            LED                  ledAux {Pins[PinId::LedAux], LED::State::DIGITAL_LOW};
 
             Wifi::Config wifiConfig {
                 .mode = AppConfig::Network::WifiMode,

@@ -8,7 +8,6 @@
 
 #include <Arduino.h>
 
-#include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 #ifdef Serial
@@ -19,17 +18,15 @@ namespace WS2812Example
 {
     namespace Detail
     {
-        struct Ws2812DataOwner;
-
-        constexpr auto LedPin = PRTN_REG_PIN__(
-            Ws2812DataOwner,
-            ::prtn::b::rmt::tx0);
-
-        constexpr auto PinClaims = std::array {
-            PRTN_PIN_CLAIM__(LedPin, ::prtn::pin::PinUse::Exclusive, "RmtTx"),
+        enum class PinId : uint8_t
+        {
+            LedData,
         };
 
-        static_assert(::prtn::pin::validatePinClaims(PinClaims), "WS2812Example has conflicting pin claims");
+        using Color = Color;
+
+        inline constexpr auto Pins = ::prtn::pin::layout(
+            ::prtn::pin::bind(PinId::LedData, GPIO_NUM_48, ::prtn::pin::Role::RmtTx));
 
         constexpr size_t      LedCount       = 8;
         constexpr uint8_t     Brightness     = 32;
@@ -59,7 +56,7 @@ namespace WS2812Example
 
             dvc::Serial          serial {AppConfig::Hardware::SerialBaudrate};
             SerialConsoleService console {serial};
-            WS2812               led {LedPin.gpioNum(), makeConfig()};
+            WS2812               led {Pins[PinId::LedData], makeConfig()};
 
             TaskHandle_t taskHandle = nullptr;
             uint32_t     frame      = 0;
@@ -98,28 +95,30 @@ namespace WS2812Example
             };
         }
 
-        inline void logError(Context& app, const char* op, WS2812::Error err) {
-            app.console.error("WS2812 %s failed: code=%s detail=%s rmt=%s native=%ld",
+        template <size_t Depth, auto... Errors>
+        inline void logError(Context& app, const char* op, const TracedErrorSet<Depth, Errors...>& error) {
+            app.console.error("WS2812 %s failed: %s::%s (%ld)%s%s",
                               op,
-                              toName(err.code),
-                              WS2812::detailName(err.detail),
-                              RMT::detailName(err.rmt.detail),
-                              static_cast<long>(err.native));
+                              error.domain(),
+                              error.name(),
+                              static_cast<long>(error.numeric_code()),
+                              error.has_message() ? ": " : "",
+                              error.message());
         }
 
         inline bool updateColorFlow(Context& app) {
             for (size_t i = 0; i < app.led.pixelCount(); ++i) {
-                const WS2812::Color color = wheel(static_cast<uint8_t>(app.frame + i * 32));
-                const auto          err   = app.led.setPixel(i, color);
-                if (!err) {
-                    logError(app, "setPixel", err);
+                const WS2812::Color color  = wheel(static_cast<uint8_t>(app.frame + i * 32));
+                const auto          result = app.led.setPixel(i, color);
+                if (result.is_err()) {
+                    logError(app, "setPixel", result.error());
                     return false;
                 }
             }
 
-            const auto showErr = app.led.show();
-            if (!showErr) {
-                logError(app, "show", showErr);
+            const auto showResult = app.led.show();
+            if (showResult.is_err()) {
+                logError(app, "show", showResult.error());
                 return false;
             }
 
@@ -176,15 +175,15 @@ namespace WS2812Example
         app.console.setup();
         app.console.printBootBanner(app.nodeInfo);
         app.console.info("WS2812 color flow: pin=%d count=%u brightness=%u order=%s",
-                         Detail::LedPin.number(),
+                         Detail::Pins[Detail::PinId::LedData],
                          static_cast<unsigned>(Detail::LedCount),
                          static_cast<unsigned>(Detail::Brightness),
                          WS2812::colorOrderName(WS2812::ColorOrder::GRB));
 
-        const auto err = app.led.setup();
-        if (!err) {
+        const auto setupResult = app.led.setup();
+        if (setupResult.is_err()) {
             app.nodeInfo.updateNodeState(ERROR);
-            Detail::logError(app, "setup", err);
+            Detail::logError(app, "setup", setupResult.error());
             app.console.printState(app.nodeInfo.getNodeState());
             return;
         }

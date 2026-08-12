@@ -227,12 +227,20 @@ check:
 
 compdb:
 	$(call section,Generating compile_commands.json / 生成 clangd 编译数据库)
+	@command -v jq >/dev/null || { \
+		printf "$(RED)✗ jq not found / 未找到 jq，无法修正 Arduino 生成的源码路径$(RESET)\n"; \
+		exit 1; \
+	}
 	$(call cmd,rm -rf $(COMPDB_BUILD_DIR))
 	@rm -rf "$(COMPDB_BUILD_DIR)"
 	$(call cmd,arduino-cli compile --fqbn $(FQBN) $(BUILD_PROPERTIES) --only-compilation-database --build-path $(COMPDB_BUILD_DIR) $(SKETCH))
 	@arduino-cli compile --fqbn $(FQBN) $(BUILD_PROPERTIES) --only-compilation-database --build-path $(COMPDB_BUILD_DIR) $(SKETCH)
 	@if [ -f "$(COMPDB_BUILD_DIR)/compile_commands.json" ]; then \
-		cp "$(COMPDB_BUILD_DIR)/compile_commands.json" ./compile_commands.json; \
+		if ! jq --arg copied_prefix "$(abspath $(COMPDB_BUILD_DIR))/sketch/src/" --arg source_prefix "$(CURDIR)/src/" 'map((if (.file | startswith($$copied_prefix)) then .file = ($$source_prefix + (.file | ltrimstr($$copied_prefix))) else . end) | .arguments = [.arguments[] | if (startswith($$copied_prefix) and (endswith(".c") or endswith(".cc") or endswith(".cpp") or endswith(".cxx"))) then $$source_prefix + ltrimstr($$copied_prefix) else . end])' "$(COMPDB_BUILD_DIR)/compile_commands.json" > "$(COMPDB_BUILD_DIR)/compile_commands.source.json"; then \
+			printf "$(RED)✗$(RESET) failed to rewrite Arduino source paths / 修正 Arduino 源码路径失败\n"; \
+			exit 1; \
+		fi; \
+		cp "$(COMPDB_BUILD_DIR)/compile_commands.source.json" ./compile_commands.json; \
 		printf "$(GREEN)✓$(RESET) compile_commands.json generated / 编译数据库已生成\n"; \
 	else \
 		printf "$(RED)✗ compile_commands.json not found in $(COMPDB_BUILD_DIR)$(RESET)\n"; \

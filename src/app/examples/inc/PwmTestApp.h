@@ -21,6 +21,16 @@ namespace PwmTestApp
 {
     namespace Detail
     {
+        enum class PinId : uint8_t
+        {
+            PwmOutput,
+            Button1,
+        };
+
+        inline constexpr auto Pins = ::prtn::pin::layout(
+            ::prtn::pin::bind(PinId::PwmOutput, GPIO_NUM_8, ::prtn::pin::Role::PwmOutput),
+            ::prtn::pin::bind(PinId::Button1, GPIO_NUM_9, ::prtn::pin::Role::InputPullup));
+
         constexpr TickType_t  TaskPeriodTicks = pdMS_TO_TICKS(AppConfig::Runtime::AppLoopIntervalMs);
         constexpr uint32_t    TaskStackWords  = AppConfig::Runtime::EspNowTaskStackWords;
         constexpr UBaseType_t TaskPriority    = AppConfig::Runtime::EspNowTaskPriority;
@@ -41,7 +51,7 @@ namespace PwmTestApp
             SerialConsoleService console {serial};
 
             Pwm::Config pwmConfig {
-                .pin            = 8,
+                .pin            = Pins[PinId::PwmOutput],
                 .frequencyHz    = 1000,
                 .resolutionBits = 8,
                 .channel        = 0,
@@ -50,7 +60,7 @@ namespace PwmTestApp
 
             Pwm pwm {pwmConfig};
 
-            Button button1 {9, LOW, INPUT_PULLUP, 50};
+            Button button1 {Pins[PinId::Button1], LOW, INPUT_PULLUP, 50};
 
             TaskHandle_t taskHandle = nullptr;
         };

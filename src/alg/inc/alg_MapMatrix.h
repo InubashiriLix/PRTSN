@@ -46,7 +46,7 @@ struct MapMatrix
     Result<void, MapMatrixError>
     set(size_t i, size_t j, const K& key, const V& val) {
         if (i >= Rows || j >= Cols) {
-            return Err(MapMatrixError::INDEX_OUT_OF_BOUNDS);
+            return Err<MapMatrixErrorCode::INDEX_OUT_OF_BOUNDS>("MapMatrix index is out of bounds");
         }
         keys.data[i][j] = key;
         vals.data[i][j] = val;
@@ -56,21 +56,21 @@ struct MapMatrix
     // ================== CRUD methods ====================
     Result<Entry, MapMatrixError> get(size_t i, size_t j) const {
         if (i >= Rows || j >= Cols) {
-            return Err(MapMatrixError::INDEX_OUT_OF_BOUNDS);
+            return Err<MapMatrixErrorCode::INDEX_OUT_OF_BOUNDS>("MapMatrix index is out of bounds");
         }
         return Ok(Entry {keys.data[i][j], vals.data[i][j]});
     }
 
     Result<K, MapMatrixError> getKey(size_t i, size_t j) const {
         if (i >= Rows || j >= Cols) {
-            return Err(MapMatrixError::INDEX_OUT_OF_BOUNDS);
+            return Err<MapMatrixErrorCode::INDEX_OUT_OF_BOUNDS>("MapMatrix index is out of bounds");
         }
         return Ok(keys.data[i][j]);
     }
 
     Result<V, MapMatrixError> getValue(size_t i, size_t j) const {
         if (i >= Rows || j >= Cols) {
-            return Err(MapMatrixError::INDEX_OUT_OF_BOUNDS);
+            return Err<MapMatrixErrorCode::INDEX_OUT_OF_BOUNDS>("MapMatrix index is out of bounds");
         }
         return Ok(vals.data[i][j]);
     }
@@ -78,7 +78,7 @@ struct MapMatrix
     // =================== setters ====================
     Result<K, MapMatrixError> setKey(size_t i, size_t j, const K& key) {
         if (i >= Rows || j >= Cols) {
-            return Err(MapMatrixError::INDEX_OUT_OF_BOUNDS);
+            return Err<MapMatrixErrorCode::INDEX_OUT_OF_BOUNDS>("MapMatrix index is out of bounds");
         }
         auto temp       = keys.data[i][j];
         keys.data[i][j] = key;
@@ -87,7 +87,7 @@ struct MapMatrix
 
     Result<V, MapMatrixError> setValue(size_t i, size_t j, const V& val) {
         if (i >= Rows || j >= Cols) {
-            return Err(MapMatrixError::INDEX_OUT_OF_BOUNDS);
+            return Err<MapMatrixErrorCode::INDEX_OUT_OF_BOUNDS>("MapMatrix index is out of bounds");
         }
         auto temp       = vals.data[i][j];
         vals.data[i][j] = val;
@@ -96,7 +96,7 @@ struct MapMatrix
 
     Result<Entry, MapMatrixError> setEntry(size_t i, size_t j, const Entry& entry) {
         if (i >= Rows || j >= Cols) {
-            return Err(MapMatrixError::INDEX_OUT_OF_BOUNDS);
+            return Err<MapMatrixErrorCode::INDEX_OUT_OF_BOUNDS>("MapMatrix index is out of bounds");
         }
         Entry temp {keys.data[i][j], vals.data[i][j]};
         keys.data[i][j] = entry.key;
@@ -182,7 +182,7 @@ struct MapMatrix
             for (size_t j = 0; j < Cols; ++j)
                 if (keys.data[i][j] == key)
                     return Ok(Idx {i, j});
-        return Err(MapMatrixError::INDEX_OUT_OF_BOUNDS);
+        return Err<MapMatrixErrorCode::INDEX_OUT_OF_BOUNDS>("MapMatrix value was not found");
     }
 
     Result<Idx, MapMatrixError> findFirstValue(const V& val) const {
@@ -190,7 +190,7 @@ struct MapMatrix
             for (size_t j = 0; j < Cols; ++j)
                 if (vals.data[i][j] == val)
                     return Ok(Idx {i, j});
-        return Err(MapMatrixError::INDEX_OUT_OF_BOUNDS);
+        return Err<MapMatrixErrorCode::INDEX_OUT_OF_BOUNDS>("MapMatrix value was not found");
     }
 
     bool containsKey(const K& key) const {
@@ -265,7 +265,7 @@ struct MapMatrix
 
     Result<void, MapMatrixError> swap(size_t i1, size_t j1, size_t i2, size_t j2) {
         if (i1 >= Rows || j1 >= Cols || i2 >= Rows || j2 >= Cols) {
-            return Err(MapMatrixError::INDEX_OUT_OF_BOUNDS);
+            return Err<MapMatrixErrorCode::INDEX_OUT_OF_BOUNDS>("MapMatrix index is out of bounds");
         }
         std::swap(keys.data[i1][j1], keys.data[i2][j2]);
         std::swap(vals.data[i1][j1], vals.data[i2][j2]);

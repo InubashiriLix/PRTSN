@@ -20,6 +20,24 @@ namespace KeyBoard4x5Example
 {
     namespace Detail
     {
+        enum class PinId : uint8_t
+        {
+            Col0,
+            Col1,
+            Col2,
+            Row0,
+            Row1,
+            Row2,
+        };
+
+        inline constexpr auto Pins = ::prtn::pin::layout(
+            ::prtn::pin::bind(PinId::Col0, GPIO_NUM_12, ::prtn::pin::Role::Output),
+            ::prtn::pin::bind(PinId::Col1, GPIO_NUM_18, ::prtn::pin::Role::Output),
+            ::prtn::pin::bind(PinId::Col2, GPIO_NUM_19, ::prtn::pin::Role::Output),
+            ::prtn::pin::bind(PinId::Row0, GPIO_NUM_2, ::prtn::pin::Role::InputPulldown),
+            ::prtn::pin::bind(PinId::Row1, GPIO_NUM_3, ::prtn::pin::Role::InputPulldown),
+            ::prtn::pin::bind(PinId::Row2, GPIO_NUM_10, ::prtn::pin::Role::InputPulldown));
+
         constexpr TickType_t  TaskPeriod     = pdMS_TO_TICKS(AppConfig::Runtime::AppLoopIntervalMs);
         constexpr uint32_t    TaskStackBytes = 4096;
         constexpr UBaseType_t TaskPriority   = 4;
@@ -44,10 +62,10 @@ namespace KeyBoard4x5Example
                 .debounceMs     = 20,
                 .longPressMs    = 600,
                 .activeLevel    = StdPinLevel::High,
-                .colPins        = {12, 18, 19},
+                .colPins        = {Pins[PinId::Col0], Pins[PinId::Col1], Pins[PinId::Col2]},
                 .colPinMode     = StdPinFunc::Output,
                 .colNum         = 3,
-                .rowPins        = {2, 3, 10},
+                .rowPins        = {Pins[PinId::Row0], Pins[PinId::Row1], Pins[PinId::Row2]},
                 .rowPinMode     = StdPinFunc::InputPulldown,
                 .rowNum         = 3,
             };

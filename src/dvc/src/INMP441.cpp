@@ -2,9 +2,9 @@
 #include "driver/i2s_types_legacy.h"
 
 INMP441::INMP441(
-    int               bckPin,
-    int               wsPin,
-    int               dataInPin,
+    gpio_num_t        bckPin,
+    gpio_num_t        wsPin,
+    gpio_num_t        dataInPin,
     uint32_t          sampleRate,
     i2s_channel_fmt_t channel,
     i2s_port_t        port)
@@ -12,9 +12,9 @@ INMP441::INMP441(
 }
 
 INMP441::Config INMP441::makeConfig(
-    int               bckPin,
-    int               wsPin,
-    int               dataInPin,
+    gpio_num_t        bckPin,
+    gpio_num_t        wsPin,
+    gpio_num_t        dataInPin,
     uint32_t          sampleRate,
     i2s_channel_fmt_t channel,
     i2s_port_t        port) {

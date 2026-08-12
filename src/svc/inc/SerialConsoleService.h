@@ -2,6 +2,7 @@
 
 #include "src/dom/NodeInfo.h"
 #include "src/dvc/inc/Serial.h"
+#include "src/fw/inc/Result.h"
 #include "freertos/idf_additions.h"
 
 #include <cstdarg>
@@ -71,6 +72,41 @@ public:
     void warn(const char* format, ...) __attribute__((format(printf, 2, 3)));
     void error(const char* format, ...) __attribute__((format(printf, 2, 3)));
     void err(const char* format, ...) __attribute__((format(printf, 2, 3)));
+
+    /** `va_list` variants for small optional logging adapters in other services. */
+    void vinfo(const char* format, va_list args) __attribute__((format(printf, 2, 0)));
+    void vdebug(const char* format, va_list args) __attribute__((format(printf, 2, 0)));
+    void vwarn(const char* format, va_list args) __attribute__((format(printf, 2, 0)));
+    void verror(const char* format, va_list args) __attribute__((format(printf, 2, 0)));
+
+    /**
+     * @brief 输出 Result/ErrorSet 的顶层错误和完整 cause chain。
+     * Print a typed Result error and its complete cause chain.
+     *
+     * @code
+     * if (result.is_err())
+     *     console.errorResult("BLE setup", result.error());
+     * @endcode
+     */
+    template <size_t Depth, auto... Errors>
+    void errorResult(const char* operation, const TracedErrorSet<Depth, Errors...>& value) {
+        error("%s failed: %s::%s (%ld)%s%s",
+              operation != nullptr ? operation : "operation",
+              value.domain(),
+              value.name(),
+              static_cast<long>(value.numeric_code()),
+              value.has_message() ? ": " : "",
+              value.message());
+        value.for_each_cause([this](const ErrorFrame& cause) {
+            error("  caused by %s::%s (%ld)%s%s",
+                  cause.domain,
+                  cause.name,
+                  static_cast<long>(cause.numericCode),
+                  cause.message != nullptr && cause.message[0] != '\0' ? ": " : "",
+                  cause.message != nullptr ? cause.message : "");
+        });
+    }
+
     void hexDump(const char* prefix, const uint8_t* data, size_t len);
 
     void printBootBanner(const NodeInfo& info);

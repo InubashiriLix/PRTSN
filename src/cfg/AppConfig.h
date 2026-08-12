@@ -51,9 +51,9 @@ struct AppConfig
 
     struct Hardware
     {
-        static constexpr uint8_t  LedMainPin     = LED::DefaultMainPin;
-        static constexpr uint8_t  LedAuxPin      = LED::DefaultAuxPin;
-        static constexpr uint32_t SerialBaudrate = dvc::Serial::DefaultBaudrate;
+        static constexpr gpio_num_t LedMainPin     = LED::DefaultMainPin;
+        static constexpr gpio_num_t LedAuxPin      = LED::DefaultAuxPin;
+        static constexpr uint32_t   SerialBaudrate = dvc::Serial::DefaultBaudrate;
     };
 
 #if PRTN_ENABLE_WIFI

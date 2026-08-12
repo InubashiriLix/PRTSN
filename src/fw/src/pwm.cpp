@@ -5,7 +5,7 @@
 Pwm::Pwm(const Config& config) : m_config(config), m_duty(m_config.initialDuty) {}
 
 bool Pwm::setup() {
-    if (m_config.frequencyHz == 0 || m_config.resolutionBits == 0) {
+    if (m_config.pin == GPIO_NUM_NC || m_config.frequencyHz == 0 || m_config.resolutionBits == 0) {
         return false;
     }
 
@@ -13,8 +13,9 @@ bool Pwm::setup() {
         return false;
     }
 
-    const bool ok = ledcAttachChannel(
-        m_config.pin,
+    const uint8_t pin = static_cast<uint8_t>(m_config.pin);
+    const bool    ok  = ledcAttachChannel(
+        pin,
         m_config.frequencyHz,
         m_config.resolutionBits,
         m_config.channel);
@@ -24,8 +25,8 @@ bool Pwm::setup() {
     }
 
     if (m_config.invert) {
-        if (!ledcOutputInvert(m_config.pin, true)) {
-            ledcDetach(m_config.pin);
+        if (!ledcOutputInvert(pin, true)) {
+            ledcDetach(pin);
             return false;
         }
     }
@@ -45,8 +46,9 @@ void Pwm::end() {
         return;
     }
 
-    ledcWrite(m_config.pin, 0);
-    ledcDetach(m_config.pin);
+    const uint8_t pin = static_cast<uint8_t>(m_config.pin);
+    ledcWrite(pin, 0);
+    ledcDetach(pin);
 
     m_started = false;
     m_duty    = 0;
@@ -61,7 +63,7 @@ bool Pwm::setDutyRaw(uint32_t duty) {
         return false;
     }
 
-    if (!ledcWrite(m_config.pin, duty)) {
+    if (!ledcWrite(static_cast<uint8_t>(m_config.pin), duty)) {
         return false;
     }
 
@@ -83,7 +85,7 @@ bool Pwm::setFrequencyHz(uint32_t frequencyHz) {
     if (!m_started || frequencyHz == 0) {
         return false;
     }
-    const uint32_t actual = ledcChangeFrequency(m_config.pin, frequencyHz, m_config.resolutionBits);
+    const uint32_t actual = ledcChangeFrequency(static_cast<uint8_t>(m_config.pin), frequencyHz, m_config.resolutionBits);
 
     if (actual == 0) {
         return false;

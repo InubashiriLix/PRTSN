@@ -28,9 +28,9 @@ public:
         uint32_t                                  debounceMs       = 20;
         uint32_t                                  longPressMs      = 600;
         StdPinLevel                               activeLevel      = StdPinLevel::High;
-        uint8_t                                   rowPins[RowNums] = {};
+        gpio_num_t                                rowPins[RowNums] = {};
         StdPinFunc                                rowPinMode       = StdPinFunc::InputPulldown;
-        uint8_t                                   colPins[ColNums] = {};
+        gpio_num_t                                colPins[ColNums] = {};
         StdPinFunc                                colPinMode       = StdPinFunc::Output;
         Matrix<RowNums, ColNums, uint32_t>&       KeyStateMatrix;
         Matrix<RowNums, ColNums, prt_hid::KeyId>& KeyIdMapMatrix;
@@ -45,12 +45,12 @@ public:
         m_snapshot = makeSnapshot(0, false);
     }
 
-    Result<void, StdError> setup() override {
+    Result<void, StdErrors> setup() override {
         if (m_initialized) {
-            return Err(StdError::INVALID_STATE);
+            return Err<StdError::INVALID_STATE>();
         }
         if (m_config.debounceMs == 0 || m_config.longPressMs < m_config.debounceMs) {
-            return Err(StdError::INVALID_ARGUMENT);
+            return Err<StdError::INVALID_ARGUMENT>();
         }
 
         const StdPinLevel inactiveLevel = m_config.activeLevel == StdPinLevel::High ? StdPinLevel::Low : StdPinLevel::High;
@@ -71,9 +71,9 @@ public:
         return Ok();
     }
 
-    Result<void, StdError> end() override {
+    Result<void, StdErrors> end() override {
         if (!m_initialized) {
-            return Err(StdError::INVALID_STATE);
+            return Err<StdError::INVALID_STATE>();
         }
 
         const StdPinLevel inactiveLevel = m_config.activeLevel == StdPinLevel::High ? StdPinLevel::Low : StdPinLevel::High;
@@ -89,9 +89,9 @@ public:
         return Ok();
     }
 
-    Result<void, StdError> reset() override {
+    Result<void, StdErrors> reset() override {
         if (m_resetting) {
-            return Err(StdError::INVALID_STATE);
+            return Err<StdError::INVALID_STATE>();
         }
 
         m_resetting = true;
@@ -103,9 +103,9 @@ public:
         return Ok();
     }
 
-    Result<KeyboardScanFrame, StdError> scan() override {
+    Result<KeyboardScanFrame, StdErrors> scan() override {
         if (!m_initialized || m_resetting) {
-            return Err(StdError::INVALID_STATE);
+            return Err<StdError::INVALID_STATE>();
         }
 
         const uint32_t    nowMs         = pdTICKS_TO_MS(xTaskGetTickCount());
@@ -152,9 +152,9 @@ public:
         return Ok(m_snapshot);
     }
 
-    Result<KeyboardScanFrame, StdError> snapshot() override {
+    Result<KeyboardScanFrame, StdErrors> snapshot() override {
         if (!m_initialized || m_resetting) {
-            return Err(StdError::INVALID_STATE);
+            return Err<StdError::INVALID_STATE>();
         }
         return Ok(m_snapshot);
     }

@@ -2,6 +2,7 @@
 
 #include "driver/i2s_types.h"
 #include "driver/i2s_types_legacy.h"
+#include "driver/gpio.h"
 #include "src/fw/inc/IIS.h"
 
 #include <cstddef>
@@ -33,9 +34,9 @@ public:
     };
 
 private:
-    static Config makeConfig(int               bckPin,
-                             int               wsPin,
-                             int               dataInPin,
+    static Config makeConfig(gpio_num_t        bckPin,
+                             gpio_num_t        wsPin,
+                             gpio_num_t        dataInPin,
                              uint32_t          sampleRate,
                              i2s_channel_fmt_t channel,
                              i2s_port_t        port);
@@ -45,9 +46,9 @@ private:
     Stats m_stats {};
 
 public:
-    INMP441(int               bckPin,
-            int               wsPin,
-            int               dataInPin,
+    INMP441(gpio_num_t        bckPin,
+            gpio_num_t        wsPin,
+            gpio_num_t        dataInPin,
             uint32_t          sampleRate = DEFAULT_SAMPLE_RATE,
             i2s_channel_fmt_t channel    = I2S_CHANNEL_FMT_ONLY_LEFT, // INMP441 L/R tied to GND.
             i2s_port_t        port       = I2S_NUM_0);

@@ -10,7 +10,7 @@ IIC::IIC() : IIC(Config {}) {}
 
 IIC::IIC(Config config) : m_config(config) {}
 
-IIC::IIC(uint8_t sdaPin, uint8_t sclPin, uint32_t frequency, i2c_port_t port)
+IIC::IIC(gpio_num_t sdaPin, gpio_num_t sclPin, uint32_t frequency, i2c_port_t port)
     : IIC(makeMasterConfig(sdaPin, sclPin, frequency, port)) {}
 
 IIC::~IIC() {
@@ -365,7 +365,7 @@ TickType_t IIC::timeoutTicks() const {
     return pdMS_TO_TICKS(m_config.timeoutMs);
 }
 
-IIC::Config IIC::makeMasterConfig(uint8_t sdaPin, uint8_t sclPin, uint32_t frequency, i2c_port_t port) {
+IIC::Config IIC::makeMasterConfig(gpio_num_t sdaPin, gpio_num_t sclPin, uint32_t frequency, i2c_port_t port) {
     Config config {};
     config.port                       = port;
     config.driverCfg.mode             = I2C_MODE_MASTER;

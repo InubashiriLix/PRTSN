@@ -2,11 +2,11 @@
 
 #include <Arduino.h>
 
-LED::LED(uint8_t pin, State ledInitState) : m_pin(pin), m_state(ledInitState) {}
+LED::LED(gpio_num_t pin, State ledInitState) : m_pin(pin), m_state(ledInitState) {}
 
 LED::State LED::setState(LED::State state) {
     m_state = state;
-    digitalWrite(m_pin, static_cast<uint8_t>(m_state));
+    digitalWrite(static_cast<uint8_t>(m_pin), static_cast<uint8_t>(m_state));
     return state;
 }
 
@@ -16,7 +16,7 @@ LED::State LED::getState() {
 
 LED::State LED::toggleState() {
     m_state = (m_state == State::DIGITAL_HIGH) ? State::DIGITAL_LOW : State::DIGITAL_HIGH;
-    digitalWrite(m_pin, static_cast<uint8_t>(m_state));
+    digitalWrite(static_cast<uint8_t>(m_pin), static_cast<uint8_t>(m_state));
     return m_state;
 }
 
@@ -25,7 +25,7 @@ LED::State LED::toogleState() {
 }
 
 bool LED::setup() {
-    pinMode(m_pin, OUTPUT);
+    pinMode(static_cast<uint8_t>(m_pin), OUTPUT);
     setState(m_state);
     return true;
 }

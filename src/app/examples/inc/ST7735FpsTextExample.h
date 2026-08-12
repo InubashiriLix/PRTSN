@@ -21,42 +21,23 @@ namespace ST7735FpsTextExample
 {
     namespace Detail
     {
-        struct St7735ResetOwner;
-        struct St7735SckOwner;
-        struct St7735MosiOwner;
-        struct St7735CsOwner;
-        struct St7735DcOwner;
-        struct St7735BacklightOwner;
-
-        constexpr auto ResetPin = PRTN_REG_PIN__(
-            St7735ResetOwner,
-            ::prtn::b::gpio::gpio1);
-        constexpr auto SckPin = PRTN_REG_PIN__(
-            St7735SckOwner,
-            ::prtn::b::spi::sck);
-        constexpr auto MosiPin = PRTN_REG_PIN__(
-            St7735MosiOwner,
-            ::prtn::b::spi::mosi);
-        constexpr auto CsPin = PRTN_REG_PIN__(
-            St7735CsOwner,
-            ::prtn::b::spi::cs);
-        constexpr auto DcPin = PRTN_REG_PIN__(
-            St7735DcOwner,
-            ::prtn::b::gpio::gpio0);
-        constexpr auto BacklightPin = PRTN_REG_PIN__(
-            St7735BacklightOwner,
-            ::prtn::b::gpio::gpio10);
-
-        constexpr auto PinClaims = std::array {
-            PRTN_PIN_CLAIM__(ResetPin, ::prtn::pin::PinUse::Exclusive, "DigitalOut"),
-            PRTN_PIN_CLAIM__(SckPin, ::prtn::pin::PinUse::Exclusive, "SpiSck"),
-            PRTN_PIN_CLAIM__(MosiPin, ::prtn::pin::PinUse::Exclusive, "SpiMosi"),
-            PRTN_PIN_CLAIM__(CsPin, ::prtn::pin::PinUse::Exclusive, "SpiCs"),
-            PRTN_PIN_CLAIM__(DcPin, ::prtn::pin::PinUse::Exclusive, "DigitalOut"),
-            PRTN_PIN_CLAIM__(BacklightPin, ::prtn::pin::PinUse::Exclusive, "DigitalOut"),
+        enum class PinId : uint8_t
+        {
+            Reset,
+            Sck,
+            Mosi,
+            Cs,
+            Dc,
+            Backlight,
         };
 
-        static_assert(::prtn::pin::validatePinClaims(PinClaims), "ST7735FpsTextExample has conflicting pin claims");
+        inline constexpr auto Pins = ::prtn::pin::layout(
+            ::prtn::pin::bind(PinId::Reset, GPIO_NUM_1, ::prtn::pin::Role::Output),
+            ::prtn::pin::bind(PinId::Sck, ::prtn::b::spi::sck, ::prtn::pin::Role::SpiSck),
+            ::prtn::pin::bind(PinId::Mosi, ::prtn::b::spi::mosi, ::prtn::pin::Role::SpiMosi),
+            ::prtn::pin::bind(PinId::Cs, ::prtn::b::spi::cs, ::prtn::pin::Role::SpiCs),
+            ::prtn::pin::bind(PinId::Dc, GPIO_NUM_0, ::prtn::pin::Role::Output),
+            ::prtn::pin::bind(PinId::Backlight, GPIO_NUM_10, ::prtn::pin::Role::Output));
 
         constexpr uint32_t SpiClockHz     = 20 * 1000 * 1000;
         constexpr size_t   DeviceIndex    = 0;
@@ -72,9 +53,9 @@ namespace ST7735FpsTextExample
         inline SPI::BusConfig makeBusConfig() {
             SPI::BusConfig config {};
             config.host                = SPI2_HOST;
-            config.bus.mosi_io_num     = MosiPin.number();
+            config.bus.mosi_io_num     = Pins[PinId::Mosi];
             config.bus.miso_io_num     = -1;
-            config.bus.sclk_io_num     = SckPin.number();
+            config.bus.sclk_io_num     = Pins[PinId::Sck];
             config.bus.quadwp_io_num   = -1;
             config.bus.quadhd_io_num   = -1;
             config.bus.max_transfer_sz = DmaBufferBytes;
@@ -88,7 +69,7 @@ namespace ST7735FpsTextExample
             config.index                 = DeviceIndex;
             config.device.clock_speed_hz = SpiClockHz;
             config.device.mode           = 0;
-            config.device.spics_io_num   = CsPin.number();
+            config.device.spics_io_num   = Pins[PinId::Cs];
             config.device.queue_size     = 4;
             return config;
         }
@@ -96,9 +77,9 @@ namespace ST7735FpsTextExample
         inline ST7735::Config makeLcdConfig() {
             ST7735::Config config       = ST7735::makeConfig(LcdOrientation);
             config.dmaBufferBytes       = DmaBufferBytes;
-            config.resetPin             = ResetPin.gpioNum();
-            config.dcPin                = DcPin.gpioNum();
-            config.backlightPin         = BacklightPin.gpioNum();
+            config.resetPin             = Pins[PinId::Reset];
+            config.dcPin                = Pins[PinId::Dc];
+            config.backlightPin         = Pins[PinId::Backlight];
             config.useResetPin          = true;
             config.useBacklightPin      = true;
             config.autoDmaBuffer        = true;
@@ -168,77 +149,84 @@ namespace ST7735FpsTextExample
             return ST7735::rgb565(static_cast<uint8_t>(pos * 3), 32, static_cast<uint8_t>(255 - pos * 3));
         }
 
-        inline void logSpiError(Context& app, const char* op, SPI::Error err) {
-            app.console.error("SPI %s failed: code=%s detail=%s native=%ld",
+        template <size_t Depth, auto... Errors>
+        inline void logError(Context& app, const char* op, const TracedErrorSet<Depth, Errors...>& error) {
+            app.console.error("%s failed: %s::%s (%ld)%s%s",
                               op,
-                              toName(err.code),
-                              SPI::detailName(err.detail),
-                              static_cast<long>(err.native));
-        }
-
-        inline void logLcdError(Context& app, const char* op, ST7735::Error err) {
-            app.console.error("ST7735 %s failed: code=%s detail=%s spi=%s native=%ld",
-                              op,
-                              toName(err.code),
-                              ST7735::detailName(err.detail),
-                              SPI::detailName(err.spi.detail),
-                              static_cast<long>(err.native));
+                              error.domain(),
+                              error.name(),
+                              static_cast<long>(error.numeric_code()),
+                              error.has_message() ? ": " : "",
+                              error.message());
+            error.for_each_cause([&app](const ErrorFrame& cause) {
+                app.console.error("  caused by %s::%s (%ld)%s%s",
+                                  cause.domain,
+                                  cause.name,
+                                  static_cast<long>(cause.numericCode),
+                                  cause.message != nullptr ? ": " : "",
+                                  cause.message != nullptr ? cause.message : "");
+            });
         }
 
         inline bool drawScene(Context& app) {
             const uint32_t startUs = micros();
             const uint32_t frame   = app.frame++;
 
-            if (!ST7735::clearFrame(app.frameBuffer, ST7735::rgb565(2, 4, 7))) {
-                app.console.error("ST7735 clearFrame failed");
+            const auto clearResult = ST7735::clearFrame(app.frameBuffer, ST7735::rgb565(2, 4, 7));
+            if (clearResult.is_err()) {
+                logError(app, "ST7735 clearFrame", clearResult.error());
                 return false;
             }
 
             for (uint8_t i = 0; i < 8; ++i) {
-                const uint16_t y     = static_cast<uint16_t>(24 + i * 6);
-                const uint16_t width = static_cast<uint16_t>(20 + wave(frame + i * 9, 70, 120));
-                if (!ST7735::fillFrameRect(app.frameBuffer, 0, y, width, 5, wheel(static_cast<uint8_t>(frame * 3 + i * 24)))) {
-                    app.console.error("ST7735 fillFrameRect/bar failed");
+                const uint16_t y         = static_cast<uint16_t>(24 + i * 6);
+                const uint16_t width     = static_cast<uint16_t>(20 + wave(frame + i * 9, 70, 120));
+                const auto     barResult = ST7735::fillFrameRect(app.frameBuffer, 0, y, width, 5, wheel(static_cast<uint8_t>(frame * 3 + i * 24)));
+                if (barResult.is_err()) {
+                    logError(app, "ST7735 fillFrameRect/bar", barResult.error());
                     return false;
                 }
             }
 
-            const uint16_t boxX = wave(frame, 64, Width - 18);
-            const uint16_t boxY = static_cast<uint16_t>(42 + wave(frame + 17, 50, 20));
-            if (!ST7735::fillFrameRect(app.frameBuffer, boxX, boxY, 18, 18, wheel(static_cast<uint8_t>(frame * 5)))) {
-                app.console.error("ST7735 fillFrameRect/box failed");
+            const uint16_t boxX      = wave(frame, 64, Width - 18);
+            const uint16_t boxY      = static_cast<uint16_t>(42 + wave(frame + 17, 50, 20));
+            const auto     boxResult = ST7735::fillFrameRect(app.frameBuffer, boxX, boxY, 18, 18, wheel(static_cast<uint8_t>(frame * 5)));
+            if (boxResult.is_err()) {
+                logError(app, "ST7735 fillFrameRect/box", boxResult.error());
                 return false;
             }
 
             char fpsText[16] {};
             std::snprintf(fpsText, sizeof(fpsText), "%lu FPS", static_cast<unsigned long>(app.fps));
-            if (!ST7735::drawFrameText(app.frameBuffer, fpsText, ST7735::TextStyle {
-                                                                     .x          = 2,
-                                                                     .y          = 2,
-                                                                     .scale      = 2,
-                                                                     .color      = ST7735::YELLOW,
-                                                                     .background = ST7735::BLACK,
-                                                                     .wrap       = false,
-                                                                 })) {
-                app.console.error("ST7735 drawFrameText/fps failed");
+            const auto fpsTextResult = ST7735::drawFrameText(app.frameBuffer, fpsText, ST7735::TextStyle {
+                                                                                           .x          = 2,
+                                                                                           .y          = 2,
+                                                                                           .scale      = 2,
+                                                                                           .color      = ST7735::YELLOW,
+                                                                                           .background = ST7735::BLACK,
+                                                                                           .wrap       = false,
+                                                                                       });
+            if (fpsTextResult.is_err()) {
+                logError(app, "ST7735 drawFrameText/fps", fpsTextResult.error());
                 return false;
             }
 
-            if (!ST7735::drawFrameText(app.frameBuffer, "ANIM + FONT", ST7735::TextStyle {
-                                                                           .x           = 2,
-                                                                           .y           = 68,
-                                                                           .scale       = 1,
-                                                                           .color       = ST7735::WHITE,
-                                                                           .transparent = true,
-                                                                           .wrap        = false,
-                                                                       })) {
-                app.console.error("ST7735 drawFrameText/title failed");
+            const auto titleResult = ST7735::drawFrameText(app.frameBuffer, "ANIM + FONT", ST7735::TextStyle {
+                                                                                               .x           = 2,
+                                                                                               .y           = 68,
+                                                                                               .scale       = 1,
+                                                                                               .color       = ST7735::WHITE,
+                                                                                               .transparent = true,
+                                                                                               .wrap        = false,
+                                                                                           });
+            if (titleResult.is_err()) {
+                logError(app, "ST7735 drawFrameText/title", titleResult.error());
                 return false;
             }
 
-            const ST7735::Error err = app.lcd.drawFrameBuffer(app.frameBuffer);
-            if (!err) {
-                logLcdError(app, "drawFrameBuffer", err);
+            const auto drawResult = app.lcd.drawFrameBuffer(app.frameBuffer);
+            if (drawResult.is_err()) {
+                logError(app, "ST7735 drawFrameBuffer", drawResult.error());
                 return false;
             }
 
@@ -319,12 +307,12 @@ namespace ST7735FpsTextExample
         app.console.setup();
         app.console.printBootBanner(app.nodeInfo);
         app.console.info("ST7735 FPS test pins: scl/sck=%d sda/mosi=%d cs=%d res=%d dc=%d bl=%d clock=%lu",
-                         Detail::SckPin,
-                         Detail::MosiPin,
-                         Detail::CsPin,
-                         Detail::ResetPin,
-                         Detail::DcPin,
-                         Detail::BacklightPin,
+                         Detail::Pins[Detail::PinId::Sck],
+                         Detail::Pins[Detail::PinId::Mosi],
+                         Detail::Pins[Detail::PinId::Cs],
+                         Detail::Pins[Detail::PinId::Reset],
+                         Detail::Pins[Detail::PinId::Dc],
+                         Detail::Pins[Detail::PinId::Backlight],
                          static_cast<unsigned long>(Detail::SpiClockHz));
         app.console.info("ST7735 FPS test: orientation=%s size=%ux%u dma=%u text=5x7",
                          ST7735::orientationName(Detail::LcdOrientation),
@@ -332,26 +320,26 @@ namespace ST7735FpsTextExample
                          static_cast<unsigned>(Detail::Height),
                          static_cast<unsigned>(Detail::DmaBufferBytes));
 
-        const SPI::Error busErr = app.spi.setupBus();
-        if (!busErr) {
+        const auto busResult = app.spi.setupBus();
+        if (busResult.is_err()) {
             app.nodeInfo.updateNodeState(ERROR);
-            Detail::logSpiError(app, "setupBus", busErr);
+            Detail::logError(app, "SPI setupBus", busResult.error());
             app.console.printState(app.nodeInfo.getNodeState());
             return;
         }
 
-        const SPI::Error deviceErr = app.spi.addDevice(Detail::makeDeviceConfig());
-        if (!deviceErr) {
+        const auto deviceResult = app.spi.addDevice(Detail::makeDeviceConfig());
+        if (deviceResult.is_err()) {
             app.nodeInfo.updateNodeState(ERROR);
-            Detail::logSpiError(app, "addDevice", deviceErr);
+            Detail::logError(app, "SPI addDevice", deviceResult.error());
             app.console.printState(app.nodeInfo.getNodeState());
             return;
         }
 
-        const auto lcdErr = app.lcd.setup();
-        if (!lcdErr) {
+        const auto lcdResult = app.lcd.setup();
+        if (lcdResult.is_err()) {
             app.nodeInfo.updateNodeState(ERROR);
-            Detail::logLcdError(app, "setup", lcdErr);
+            Detail::logError(app, "ST7735 setup", lcdResult.error());
             app.console.printState(app.nodeInfo.getNodeState());
             return;
         }

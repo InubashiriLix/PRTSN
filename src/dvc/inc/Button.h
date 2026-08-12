@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include "driver/gpio.h"
 #include <cstddef>
 #include <cstdint>
 
@@ -25,10 +26,10 @@ public:
 private:
     constexpr static size_t EVENT_QUEUE_CAPACITY = 8;
 
-    uint8_t  m_pin;
-    uint8_t  m_activeLevel;
-    uint8_t  m_inputMode;
-    uint32_t m_debounceMs;
+    gpio_num_t m_pin;
+    uint8_t    m_activeLevel;
+    uint8_t    m_inputMode;
+    uint32_t   m_debounceMs;
 
     State    m_state             = State::RELEASED;
     uint8_t  m_lastRawLevel      = HIGH;
@@ -48,10 +49,10 @@ private:
     volatile uint32_t m_lastInterruptMs  = 0;
 
 public:
-    Button(uint8_t  pin,
-           uint8_t  activeLevel = LOW,
-           uint8_t  inputMode   = INPUT_PULLUP,
-           uint32_t debounceMs  = 30);
+    Button(gpio_num_t pin,
+           uint8_t    activeLevel = LOW,
+           uint8_t    inputMode   = INPUT_PULLUP,
+           uint32_t   debounceMs  = 30);
 
     bool setup();
     bool setupInterrupt(Callback callback      = nullptr,
@@ -70,9 +71,9 @@ public:
     bool  isPressed() const;
     bool  isReleased() const;
 
-    uint8_t  pin() const;
-    uint32_t lastStateChangeMs() const;
-    uint32_t lastInterruptMs() const;
+    gpio_num_t pin() const;
+    uint32_t   lastStateChangeMs() const;
+    uint32_t   lastInterruptMs() const;
 
 private:
     static void IRAM_ATTR interruptEntry(void* arg);

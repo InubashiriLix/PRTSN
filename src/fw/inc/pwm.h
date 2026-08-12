@@ -1,5 +1,7 @@
 #pragma once
 
+#include "driver/gpio.h"
+
 #include <cstdint>
 class Pwm
 {
@@ -10,12 +12,12 @@ public:
 
     struct Config
     {
-        uint8_t  pin;
-        uint32_t frequencyHz    = DefaultFrequencyHz;
-        uint8_t  resolutionBits = DefaultResolutionBits;
-        uint8_t  channel        = DefaultChannel;
-        uint32_t initialDuty    = 0;
-        bool     invert         = false;
+        gpio_num_t pin            = GPIO_NUM_NC;
+        uint32_t   frequencyHz    = DefaultFrequencyHz;
+        uint8_t    resolutionBits = DefaultResolutionBits;
+        uint8_t    channel        = DefaultChannel;
+        uint32_t   initialDuty    = 0;
+        bool       invert         = false;
     };
 
     explicit Pwm(const Config& config);

@@ -150,15 +150,19 @@ Agent Panel 是一个物理设备，但它同时显示最多 7 个逻辑 agent�
     block(fill: green-pale, stroke: .6pt + green, inset: 7pt, radius: 3pt)[*应用协议*\REGISTER / SET_STATE / SET_TEXT],
     align(center)[↔],
     block(fill: green-pale, stroke: .6pt + green, inset: 7pt, radius: 3pt)[*应用协议*\slot registry / command result],
+
     block(fill: cyan-pale, stroke: .6pt + cyan, inset: 7pt, radius: 3pt)[*GATT Client*\发现、读、写、订阅],
     align(center)[↔],
     block(fill: cyan-pale, stroke: .6pt + cyan, inset: 7pt, radius: 3pt)[*GATT Server*\Service / Characteristic],
+
     block(fill: amber-pale, stroke: .6pt + amber, inset: 7pt, radius: 3pt)[*ATT*\handle、opcode、MTU],
     align(center)[↔],
     block(fill: amber-pale, stroke: .6pt + amber, inset: 7pt, radius: 3pt)[*ATT*\attribute database],
+
     block(fill: red-pale, stroke: .6pt + red, inset: 7pt, radius: 3pt)[*Link / Security*\连接、加密、重传],
     align(center)[↔],
     block(fill: red-pale, stroke: .6pt + red, inset: 7pt, radius: 3pt)[*Link / Security*\广播、bond、射频],
+
     align(center)[Rust broker], [], align(center)[ESP32 Panel],
   )
 ]

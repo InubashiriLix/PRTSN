@@ -10,10 +10,10 @@
 class IIC
 {
 public:
-    static constexpr uint8_t  DefaultSclPin    = 5;
-    static constexpr uint8_t  DefaultSdaPin    = 4;
-    static constexpr uint32_t DefaultFrequency = 400000;
-    static constexpr uint16_t DefaultTimeoutMs = 50;
+    static constexpr gpio_num_t DefaultSclPin    = GPIO_NUM_5;
+    static constexpr gpio_num_t DefaultSdaPin    = GPIO_NUM_4;
+    static constexpr uint32_t   DefaultFrequency = 400000;
+    static constexpr uint16_t   DefaultTimeoutMs = 50;
 
     struct Config
     {
@@ -74,7 +74,7 @@ public:
 public:
     IIC();
     explicit IIC(Config config);
-    IIC(uint8_t sdaPin, uint8_t sclPin, uint32_t frequency = DefaultFrequency, i2c_port_t port = I2C_NUM_0);
+    IIC(gpio_num_t sdaPin, gpio_num_t sclPin, uint32_t frequency = DefaultFrequency, i2c_port_t port = I2C_NUM_0);
     ~IIC();
 
     Error setup();
@@ -109,5 +109,5 @@ private:
     bool       validBuffer(const uint8_t* data, size_t length);
     TickType_t timeoutTicks() const;
 
-    static Config makeMasterConfig(uint8_t sdaPin, uint8_t sclPin, uint32_t frequency, i2c_port_t port);
+    static Config makeMasterConfig(gpio_num_t sdaPin, gpio_num_t sclPin, uint32_t frequency, i2c_port_t port);
 };
