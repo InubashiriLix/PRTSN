@@ -8,6 +8,10 @@ namespace ble_agent_light
     {
         constexpr uint16_t EmptyColor     = ST7735::rgb565(32, 32, 32);
         constexpr uint16_t SeparatorColor = ST7735::rgb565(24, 24, 24);
+
+        [[nodiscard]] constexpr uint16_t lcdColor(Color color) {
+            return ST7735::rgb565(color.r, color.g, color.b);
+        }
     }
 
     DisplayService::SetupResult DisplayService::setup() {
@@ -211,23 +215,7 @@ namespace ble_agent_light
     }
 
     uint16_t DisplayService::stateColor(protocol::AgentState state) {
-        switch (state) {
-            case protocol::AgentState::Off:
-                return ST7735::BLACK;
-            case protocol::AgentState::Idle:
-                return ST7735::rgb565(32, 64, 96);
-            case protocol::AgentState::Working:
-                return ST7735::rgb565(0, 128, 192);
-            case protocol::AgentState::WaitPermission:
-                return ST7735::rgb565(240, 80, 0);
-            case protocol::AgentState::WaitOption:
-                return ST7735::rgb565(255, 32, 0);
-            case protocol::AgentState::Done:
-                return ST7735::rgb565(0, 128, 64);
-            case protocol::AgentState::Error:
-                return ST7735::rgb565(192, 0, 32);
-        }
-        return ST7735::RED;
+        return lcdColor(AgentVisualTheme::state(state));
     }
 
     void DisplayService::copyDisplayText(
