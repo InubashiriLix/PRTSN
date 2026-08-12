@@ -9,26 +9,26 @@ SPI::SPI() : SPI(BusConfig {}) {}
 SPI::SPI(BusConfig busConfig) : m_busConfig(busConfig) {}
 
 SPI::~SPI() {
-    end();
+    (void)end();
 }
 
-SPI::Error SPI::setupBus() {
+SPI::SetupResult SPI::setupBus() {
     if (m_started) {
-        return makeError(StdError::INVALID_STATE, Detail::ALREADY_STARTED, ESP_ERR_INVALID_STATE);
+        return Err<Detail::ALREADY_STARTED>("SPI bus is already initialized");
     }
 
     const esp_err_t err = spi_bus_initialize(m_busConfig.host, &m_busConfig.bus, SPI_DMA_CH_AUTO);
     if (err != ESP_OK) {
-        return makeError(toStdErr(err), Detail::DRIVER_INSTALL_FAILED, err);
+        return NativeErr<Detail::DRIVER_INSTALL_FAILED>(err, "SPI bus initialization failed");
     }
 
     m_started = true;
-    return clearError();
+    return Ok();
 }
 
-SPI::Error SPI::end() {
+SPI::EndResult SPI::end() {
     if (!m_started) {
-        return clearError();
+        return Ok();
     }
 
     for (size_t i = 0; i < m_deviceCnt; ++i) {
@@ -38,7 +38,7 @@ SPI::Error SPI::end() {
 
         const esp_err_t removeErr = spi_bus_remove_device(m_devices[i].handle);
         if (removeErr != ESP_OK) {
-            return makeError(toStdErr(removeErr), Detail::DEVICE_REMOVE_FAILED, removeErr);
+            return NativeErr<Detail::DEVICE_REMOVE_FAILED>(removeErr, "SPI device removal failed while shutting down the bus");
         }
         m_devices[i].handle = nullptr;
     }
@@ -46,21 +46,19 @@ SPI::Error SPI::end() {
 
     const esp_err_t err = spi_bus_free(m_busConfig.host);
     if (err != ESP_OK) {
-        return makeError(toStdErr(err), Detail::DRIVER_DELETE_FAILED, err);
+        return NativeErr<Detail::DRIVER_DELETE_FAILED>(err, "SPI bus shutdown failed");
     }
 
     m_started = false;
-    return clearError();
+    return Ok();
 }
 
-SPI::Error SPI::addDevice(const DeviceConfig& deviceConfig) {
-    Error err = ensureStarted();
-    if (!err) {
-        return err;
-    }
+SPI::DeviceResult SPI::addDevice(const DeviceConfig& deviceConfig) {
+    if (!m_started)
+        return Err<Detail::NOT_STARTED>("SPI bus must be initialized before adding a device");
 
     if (m_deviceCnt >= DefaultMaxDeviceNum) {
-        return makeError(StdError::INVALID_STATE, Detail::DEVICE_FULL, ESP_ERR_INVALID_STATE);
+        return Err<Detail::DEVICE_FULL>("SPI device table is full");
     }
 
     DeviceConfig& slot = m_devices[m_deviceCnt];
@@ -71,26 +69,24 @@ SPI::Error SPI::addDevice(const DeviceConfig& deviceConfig) {
     const esp_err_t native = spi_bus_add_device(m_busConfig.host, &slot.device, &slot.handle);
     if (native != ESP_OK) {
         slot = {};
-        return makeError(toStdErr(native), Detail::PARAM_CONFIG_FAILED, native);
+        return NativeErr<Detail::PARAM_CONFIG_FAILED>(native, "SPI device configuration failed");
     }
 
     ++m_deviceCnt;
-    return clearError();
+    return Ok();
 }
 
-SPI::Error SPI::removeDevice(size_t index) {
-    Error err = ensureStarted();
-    if (!err) {
-        return err;
-    }
+SPI::DeviceResult SPI::removeDevice(size_t index) {
+    if (!m_started)
+        return Err<Detail::NOT_STARTED>("SPI bus must be initialized before removing a device");
 
     if (!validDevice(index)) {
-        return makeError(StdError::INVALID_ARGS, Detail::PROBE_FAILED, ESP_ERR_INVALID_ARG);
+        return Err<Detail::PROBE_FAILED>("SPI device index is invalid");
     }
 
     const esp_err_t native = spi_bus_remove_device(m_devices[index].handle);
     if (native != ESP_OK) {
-        return makeError(toStdErr(native), Detail::DEVICE_REMOVE_FAILED, native);
+        return NativeErr<Detail::DEVICE_REMOVE_FAILED>(native, "SPI device removal failed");
     }
 
     for (size_t i = index; i + 1 < m_deviceCnt; ++i) {
@@ -100,25 +96,23 @@ SPI::Error SPI::removeDevice(size_t index) {
 
     --m_deviceCnt;
     m_devices[m_deviceCnt] = {};
-    return clearError();
+    return Ok();
 }
 
-SPI::Error SPI::transmit(size_t dvcIndex, const Transaction& transaction) {
-    Error err = ensureStarted();
-    if (!err) {
-        return err;
-    }
+SPI::TransferResult SPI::transmit(size_t dvcIndex, const Transaction& transaction) {
+    if (!m_started)
+        return Err<Detail::NOT_STARTED>("SPI bus is not initialized");
 
     if (!validDevice(dvcIndex)) {
-        return makeError(StdError::INVALID_ARGS, Detail::PROBE_FAILED, ESP_ERR_INVALID_ARG);
+        return Err<Detail::PROBE_FAILED>("SPI device index is invalid");
     }
 
     if (transaction.length == 0) {
-        return clearError();
+        return Ok();
     }
 
     if (transaction.txData == nullptr && transaction.rxData == nullptr) {
-        return makeError(StdError::INVALID_ARGS, Detail::INVALID_BUFFER, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_BUFFER>("SPI transaction has no input or output buffer");
     }
 
     spi_transaction_t espTrans {};
@@ -133,42 +127,40 @@ SPI::Error SPI::transmit(size_t dvcIndex, const Transaction& transaction) {
 
     const esp_err_t native = spi_device_polling_transmit(m_devices[dvcIndex].handle, &espTrans);
     if (native != ESP_OK) {
-        const Detail detail = transaction.rxData != nullptr && transaction.txData == nullptr ? Detail::READ_FAILED : Detail::WRITE_FAILED;
-        return makeError(toStdErr(native), detail, native);
+        if (transaction.rxData != nullptr && transaction.txData == nullptr)
+            return NativeErr<Detail::READ_FAILED>(native, "SPI read transaction failed");
+        if (transaction.rxData != nullptr && transaction.txData != nullptr)
+            return NativeErr<Detail::WRITE_READ_FAILED>(native, "SPI full-duplex transaction failed");
+        return NativeErr<Detail::WRITE_FAILED>(native, "SPI write transaction failed");
     }
 
-    return clearError();
+    return Ok();
 }
 
-SPI::Error SPI::write(size_t dvcIndex, const uint8_t* data, size_t len) {
+SPI::TransferResult SPI::write(size_t dvcIndex, const uint8_t* data, size_t len) {
     if (!validBuffer(data, len)) {
-        return makeError(StdError::INVALID_ARGS, Detail::INVALID_BUFFER, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_BUFFER>("SPI write buffer is null");
     }
 
     return transmit(dvcIndex, {.txData = data, .length = len});
 }
 
-SPI::Error SPI::read(size_t dvcIndex, uint8_t* buf, size_t len) {
+SPI::TransferResult SPI::read(size_t dvcIndex, uint8_t* buf, size_t len) {
     if (!validBuffer(buf, len)) {
-        return makeError(StdError::INVALID_ARGS, Detail::INVALID_BUFFER, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_BUFFER>("SPI read buffer is null");
     }
 
     return transmit(dvcIndex, {.rxData = buf, .length = len, .rxOnly = true});
 }
 
-SPI::Error SPI::writeRegister(size_t dvcIndex, uint8_t reg, uint8_t value) {
+SPI::TransferResult SPI::writeRegister(size_t dvcIndex, uint8_t reg, uint8_t value) {
     const uint8_t buf[] {reg, value};
-    Error         err = transmit(dvcIndex, {.txData = buf, .length = sizeof(buf)});
-    if (!err) {
-        return makeError(err.code, Detail::WRITE_READ_FAILED, err.native);
-    }
-
-    return clearError();
+    return transmit(dvcIndex, {.txData = buf, .length = sizeof(buf)});
 }
 
-SPI::Error SPI::readRegister(size_t dvcIndex, uint8_t reg, uint8_t* buf, size_t len) {
+SPI::TransferResult SPI::readRegister(size_t dvcIndex, uint8_t reg, uint8_t* buf, size_t len) {
     if (!validBuffer(buf, len)) {
-        return makeError(StdError::INVALID_ARGS, Detail::INVALID_BUFFER, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_BUFFER>("SPI register read buffer is null");
     }
 
     static constexpr size_t MaxFrame = 64;
@@ -177,80 +169,24 @@ SPI::Error SPI::readRegister(size_t dvcIndex, uint8_t reg, uint8_t* buf, size_t 
     const size_t            frameSize = 1 + len;
 
     if (frameSize > MaxFrame) {
-        return makeError(StdError::INVALID_SIZE, Detail::INVALID_BUFFER, ESP_ERR_INVALID_SIZE);
+        return Err<Detail::INVALID_BUFFER>("SPI register read exceeds the local frame buffer");
     }
 
-    txBuf[0]  = reg;
-    Error err = transmit(dvcIndex, {.txData = txBuf, .rxData = rxBuf, .length = frameSize});
-    if (!err) {
-        return makeError(err.code, Detail::WRITE_READ_FAILED, err.native);
-    }
+    txBuf[0]                    = reg;
+    const TransferResult result = transmit(dvcIndex, {.txData = txBuf, .rxData = rxBuf, .length = frameSize});
+    if (result.is_err())
+        return result;
 
     std::memcpy(buf, rxBuf + 1, len);
-    return clearError();
+    return Ok();
 }
 
 bool SPI::started() const {
     return m_started;
 }
 
-SPI::Error SPI::lastError() const {
-    return m_lastError;
-}
-
 const SPI::BusConfig& SPI::config() const {
     return m_busConfig;
-}
-
-const char* SPI::detailName(Detail detail) noexcept {
-    switch (detail) {
-        case Detail::NONE:
-            return "NONE";
-        case Detail::NOT_STARTED:
-            return "NOT_STARTED";
-        case Detail::ALREADY_STARTED:
-            return "ALREADY_STARTED";
-        case Detail::DEVICE_FULL:
-            return "DEVICE_FULL";
-        case Detail::INVALID_BUFFER:
-            return "INVALID_BUFFER";
-        case Detail::PARAM_CONFIG_FAILED:
-            return "PARAM_CONFIG_FAILED";
-        case Detail::DRIVER_INSTALL_FAILED:
-            return "DRIVER_INSTALL_FAILED";
-        case Detail::DRIVER_DELETE_FAILED:
-            return "DRIVER_DELETE_FAILED";
-        case Detail::WRITE_FAILED:
-            return "WRITE_FAILED";
-        case Detail::READ_FAILED:
-            return "READ_FAILED";
-        case Detail::WRITE_READ_FAILED:
-            return "WRITE_READ_FAILED";
-        case Detail::PROBE_FAILED:
-            return "PROBE_FAILED";
-        case Detail::DEVICE_REMOVE_FAILED:
-            return "DEVICE_REMOVE_FAILED";
-    }
-
-    return "UNKNOWN";
-}
-
-SPI::Error SPI::makeError(StdError code, Detail detail, esp_err_t native) {
-    m_lastError = Error {.code = code, .detail = detail, .native = native};
-    return m_lastError;
-}
-
-SPI::Error SPI::clearError() {
-    m_lastError = Error {};
-    return m_lastError;
-}
-
-SPI::Error SPI::ensureStarted() {
-    if (m_started) {
-        return Error {};
-    }
-
-    return makeError(StdError::INVALID_STATE, Detail::NOT_STARTED, ESP_ERR_INVALID_STATE);
 }
 
 bool SPI::validDevice(size_t index) const {

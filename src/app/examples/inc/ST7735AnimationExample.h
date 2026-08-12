@@ -135,21 +135,23 @@ namespace ST7735AnimationExample
             return app;
         }
 
-        inline void logSpiError(Context& app, const char* op, SPI::Error err) {
-            app.console.error("SPI %s failed: code=%s detail=%s native=%ld",
+        template <size_t Depth, auto... Errors>
+        inline void logError(Context& app, const char* op, const TracedErrorSet<Depth, Errors...>& error) {
+            app.console.error("%s failed: %s::%s (%ld)%s%s",
                               op,
-                              toName(err.code),
-                              SPI::detailName(err.detail),
-                              static_cast<long>(err.native));
-        }
-
-        inline void logLcdError(Context& app, const char* op, ST7735::Error err) {
-            app.console.error("ST7735 %s failed: code=%s detail=%s spi=%s native=%ld",
-                              op,
-                              toName(err.code),
-                              ST7735::detailName(err.detail),
-                              SPI::detailName(err.spi.detail),
-                              static_cast<long>(err.native));
+                              error.domain(),
+                              error.name(),
+                              static_cast<long>(error.numeric_code()),
+                              error.has_message() ? ": " : "",
+                              error.message());
+            error.for_each_cause([&app](const ErrorFrame& cause) {
+                app.console.error("  caused by %s::%s (%ld)%s%s",
+                                  cause.domain,
+                                  cause.name,
+                                  static_cast<long>(cause.numericCode),
+                                  cause.message != nullptr ? ": " : "",
+                                  cause.message != nullptr ? cause.message : "");
+            });
         }
 
         inline void waitForFrame(Context& app) {
@@ -194,26 +196,28 @@ namespace ST7735AnimationExample
             waitForFrame(app);
             const uint16_t frameIndex = static_cast<uint16_t>(app.player.frameIndex % app.animation.frameCount);
 
-            if (!ST7735::copyAnimationFrame(app.frameBuffer, app.animation, frameIndex)) {
-                app.console.error("ST7735 copyAnimationFrame failed");
+            const auto copyResult = ST7735::copyAnimationFrame(app.frameBuffer, app.animation, frameIndex);
+            if (copyResult.is_err()) {
+                logError(app, "ST7735 copyAnimationFrame", copyResult.error());
                 return false;
             }
 
-            if (!ST7735::drawFrameText(app.frameBuffer, "ST7735 DMA", ST7735::TextStyle {
-                                                                          .x          = 2,
-                                                                          .y          = 2,
-                                                                          .scale      = 1,
-                                                                          .color      = ST7735::WHITE,
-                                                                          .background = ST7735::BLACK,
-                                                                          .wrap       = false,
-                                                                      })) {
-                app.console.error("ST7735 drawFrameText failed");
+            const auto textResult = ST7735::drawFrameText(app.frameBuffer, "ST7735 DMA", ST7735::TextStyle {
+                                                                                             .x          = 2,
+                                                                                             .y          = 2,
+                                                                                             .scale      = 1,
+                                                                                             .color      = ST7735::WHITE,
+                                                                                             .background = ST7735::BLACK,
+                                                                                             .wrap       = false,
+                                                                                         });
+            if (textResult.is_err()) {
+                logError(app, "ST7735 drawFrameText", textResult.error());
                 return false;
             }
 
-            const auto err = app.lcd.drawFrameBuffer(app.frameBuffer);
-            if (!err) {
-                logLcdError(app, "drawFrameBuffer", err);
+            const auto drawResult = app.lcd.drawFrameBuffer(app.frameBuffer);
+            if (drawResult.is_err()) {
+                logError(app, "ST7735 drawFrameBuffer", drawResult.error());
                 return false;
             }
 
@@ -315,26 +319,26 @@ namespace ST7735AnimationExample
                          static_cast<unsigned>(LcdAnimation::Fps),
                          static_cast<unsigned>(app.animation.frameStride));
 
-        const SPI::Error busErr = app.spi.setupBus();
-        if (!busErr) {
+        const auto busResult = app.spi.setupBus();
+        if (busResult.is_err()) {
             app.nodeInfo.updateNodeState(ERROR);
-            Detail::logSpiError(app, "setupBus", busErr);
+            Detail::logError(app, "SPI setupBus", busResult.error());
             app.console.printState(app.nodeInfo.getNodeState());
             return;
         }
 
-        const SPI::Error deviceErr = app.spi.addDevice(Detail::makeDeviceConfig());
-        if (!deviceErr) {
+        const auto deviceResult = app.spi.addDevice(Detail::makeDeviceConfig());
+        if (deviceResult.is_err()) {
             app.nodeInfo.updateNodeState(ERROR);
-            Detail::logSpiError(app, "addDevice", deviceErr);
+            Detail::logError(app, "SPI addDevice", deviceResult.error());
             app.console.printState(app.nodeInfo.getNodeState());
             return;
         }
 
-        const auto lcdErr = app.lcd.setup();
-        if (!lcdErr) {
+        const auto lcdResult = app.lcd.setup();
+        if (lcdResult.is_err()) {
             app.nodeInfo.updateNodeState(ERROR);
-            Detail::logLcdError(app, "setup", lcdErr);
+            Detail::logError(app, "ST7735 setup", lcdResult.error());
             app.console.printState(app.nodeInfo.getNodeState());
             return;
         }

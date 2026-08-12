@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <limits>
 
 namespace
 {
@@ -126,42 +127,46 @@ ST7735::~ST7735() {
     releaseDmaBuffer();
 }
 
-ST7735::Error ST7735::setup() {
+ST7735::SetupResult ST7735::setup() {
     if (m_started) {
-        return makeError(StdError::INVALID_STATE, Detail::ALREADY_STARTED, ESP_ERR_INVALID_STATE);
+        return Err<Detail::ALREADY_STARTED>("ST7735 is already initialized");
     }
 
     if (m_config.useOrientationPreset) {
         applyOrientation(m_config, m_config.orientation);
     }
+    if (!validWindow(0, 0, m_config.width, m_config.height) ||
+        m_config.width > std::numeric_limits<uint16_t>::max() - m_config.columnOffset ||
+        m_config.height > std::numeric_limits<uint16_t>::max() - m_config.rowOffset ||
+        (m_config.autoDmaBuffer && m_config.dmaBufferBytes == 0) ||
+        !GPIO_IS_VALID_OUTPUT_GPIO(m_config.dcPin) ||
+        (m_config.useResetPin && !GPIO_IS_VALID_OUTPUT_GPIO(m_config.resetPin)) ||
+        (m_config.useBacklightPin && !GPIO_IS_VALID_OUTPUT_GPIO(m_config.backlightPin))) {
+        return Err<Detail::INVALID_CONFIG>("ST7735 configuration is invalid");
+    }
 
     if (m_config.autoDmaBuffer && m_dmaBuffer == nullptr) {
-        Error dmaErr = allocateDmaBuffer(m_config.dmaBufferBytes);
-        if (!dmaErr) {
-            return dmaErr;
-        }
+        const BufferResult dmaResult = allocateDmaBuffer(m_config.dmaBufferBytes);
+        if (dmaResult.is_err())
+            return dmaResult.propagate();
     }
 
-    Error err = configurePins();
-    if (!err) {
-        return err;
-    }
+    const PinResult pinResult = configurePins();
+    if (pinResult.is_err())
+        return pinResult.propagate();
 
-    err = hardwareReset();
-    if (!err) {
-        return err;
-    }
+    const ResetResult resetResult = hardwareReset();
+    if (resetResult.is_err())
+        return resetResult.propagate();
 
-    err = writeCommand(CmdSwReset);
-    if (!err) {
-        return err;
-    }
+    IoResult ioResult = writeCommand(CmdSwReset);
+    if (ioResult.is_err())
+        return ioResult.propagate();
     vTaskDelay(pdMS_TO_TICKS(150));
 
-    err = writeCommand(CmdSlpOut);
-    if (!err) {
-        return err;
-    }
+    ioResult = writeCommand(CmdSlpOut);
+    if (ioResult.is_err())
+        return ioResult.propagate();
     vTaskDelay(pdMS_TO_TICKS(120));
 
     static constexpr uint8_t frmCtr[]  = {0x05, 0x3A, 0x3A};
@@ -176,102 +181,92 @@ ST7735::Error ST7735::setup() {
     static constexpr uint8_t gammaP[]  = {0x10, 0x0E, 0x02, 0x03, 0x0E, 0x07, 0x02, 0x07, 0x0A, 0x12, 0x27, 0x37, 0x00, 0x0D, 0x0E, 0x10};
     static constexpr uint8_t gammaN[]  = {0x10, 0x0E, 0x03, 0x03, 0x0F, 0x06, 0x02, 0x08, 0x0A, 0x13, 0x26, 0x36, 0x00, 0x0D, 0x0E, 0x10};
 
-    err = writeCommandData(0xB1, frmCtr, sizeof(frmCtr));
-    if (!err) {
-        return err;
-    }
-    err = writeCommandData(0xB2, frmCtr, sizeof(frmCtr));
-    if (!err) {
-        return err;
-    }
-    err = writeCommandData(0xB3, frmCtr3, sizeof(frmCtr3));
-    if (!err) {
-        return err;
-    }
-    err = writeCommandData(0xB4, invCtr, sizeof(invCtr));
-    if (!err) {
-        return err;
-    }
-    err = writeCommandData(0xC0, pwCtr1, sizeof(pwCtr1));
-    if (!err) {
-        return err;
-    }
-    err = writeCommandData(0xC1, pwCtr2, sizeof(pwCtr2));
-    if (!err) {
-        return err;
-    }
-    err = writeCommandData(0xC2, pwCtr3, sizeof(pwCtr3));
-    if (!err) {
-        return err;
-    }
-    err = writeCommandData(0xC3, pwCtr4, sizeof(pwCtr4));
-    if (!err) {
-        return err;
-    }
-    err = writeCommandData(0xC4, pwCtr5, sizeof(pwCtr5));
-    if (!err) {
-        return err;
-    }
-    err = writeCommandData(0xC5, vmCtr1, sizeof(vmCtr1));
-    if (!err) {
-        return err;
-    }
+    ioResult = writeCommandData(0xB1, frmCtr, sizeof(frmCtr));
+    if (ioResult.is_err())
+        return ioResult.propagate();
+    ioResult = writeCommandData(0xB2, frmCtr, sizeof(frmCtr));
+    if (ioResult.is_err())
+        return ioResult.propagate();
+    ioResult = writeCommandData(0xB3, frmCtr3, sizeof(frmCtr3));
+    if (ioResult.is_err())
+        return ioResult.propagate();
+    ioResult = writeCommandData(0xB4, invCtr, sizeof(invCtr));
+    if (ioResult.is_err())
+        return ioResult.propagate();
+    ioResult = writeCommandData(0xC0, pwCtr1, sizeof(pwCtr1));
+    if (ioResult.is_err())
+        return ioResult.propagate();
+    ioResult = writeCommandData(0xC1, pwCtr2, sizeof(pwCtr2));
+    if (ioResult.is_err())
+        return ioResult.propagate();
+    ioResult = writeCommandData(0xC2, pwCtr3, sizeof(pwCtr3));
+    if (ioResult.is_err())
+        return ioResult.propagate();
+    ioResult = writeCommandData(0xC3, pwCtr4, sizeof(pwCtr4));
+    if (ioResult.is_err())
+        return ioResult.propagate();
+    ioResult = writeCommandData(0xC4, pwCtr5, sizeof(pwCtr5));
+    if (ioResult.is_err())
+        return ioResult.propagate();
+    ioResult = writeCommandData(0xC5, vmCtr1, sizeof(vmCtr1));
+    if (ioResult.is_err())
+        return ioResult.propagate();
 
     const uint8_t colorMode = 0x05;
-    err                     = writeCommandData(CmdColMod, &colorMode, 1);
-    if (!err) {
-        return err;
-    }
+    ioResult                = writeCommandData(CmdColMod, &colorMode, 1);
+    if (ioResult.is_err())
+        return ioResult.propagate();
     vTaskDelay(pdMS_TO_TICKS(10));
 
-    err = writeCommandData(CmdMadCtl, &m_config.madctl, 1);
-    if (!err) {
-        return err;
-    }
+    ioResult = writeCommandData(CmdMadCtl, &m_config.madctl, 1);
+    if (ioResult.is_err())
+        return ioResult.propagate();
 
-    err = writeCommand(m_config.invertColors ? CmdInvOn : CmdInvOff);
-    if (!err) {
-        return err;
-    }
+    ioResult = writeCommand(m_config.invertColors ? CmdInvOn : CmdInvOff);
+    if (ioResult.is_err())
+        return ioResult.propagate();
 
-    err = writeCommandData(0xE0, gammaP, sizeof(gammaP));
-    if (!err) {
-        return err;
-    }
-    err = writeCommandData(0xE1, gammaN, sizeof(gammaN));
-    if (!err) {
-        return err;
-    }
+    ioResult = writeCommandData(0xE0, gammaP, sizeof(gammaP));
+    if (ioResult.is_err())
+        return ioResult.propagate();
+    ioResult = writeCommandData(0xE1, gammaN, sizeof(gammaN));
+    if (ioResult.is_err())
+        return ioResult.propagate();
 
-    err = writeCommand(CmdNorOn);
-    if (!err) {
-        return err;
-    }
+    ioResult = writeCommand(CmdNorOn);
+    if (ioResult.is_err())
+        return ioResult.propagate();
     vTaskDelay(pdMS_TO_TICKS(10));
 
-    err = writeCommand(CmdDispOn);
-    if (!err) {
-        return err;
-    }
+    ioResult = writeCommand(CmdDispOn);
+    if (ioResult.is_err())
+        return ioResult.propagate();
     vTaskDelay(pdMS_TO_TICKS(120));
 
-    m_started = true;
-
     if (m_config.useBacklightPin) {
-        return setBacklight(true);
+        const ControlResult backlightResult = setBacklight(true);
+        if (backlightResult.is_err())
+            return backlightResult.propagate();
     }
 
-    return clearError();
+    m_started = true;
+    return Ok();
 }
 
-ST7735::Error ST7735::setOrientation(Orientation orientation) {
+ST7735::ControlResult ST7735::setOrientation(Orientation orientation) {
+    const Config previousConfig = m_config;
     applyOrientation(m_config, orientation);
 
     if (!m_started) {
-        return clearError();
+        return Ok();
     }
 
-    return writeCommandData(CmdMadCtl, &m_config.madctl, 1);
+    const IoResult result = writeCommandData(CmdMadCtl, &m_config.madctl, 1);
+    if (result.is_err()) {
+        m_config = previousConfig;
+        return result.propagate();
+    }
+    return Ok();
 }
 
 void ST7735::releaseDmaBuffer() {
@@ -284,9 +279,9 @@ void ST7735::releaseDmaBuffer() {
     m_ownsDmaBuffer = false;
 }
 
-ST7735::Error ST7735::allocateDmaBuffer(size_t bytes) {
-    if (bytes == 0) {
-        return makeError(StdError::INVALID_SIZE, Detail::INVALID_PARAM, ESP_ERR_INVALID_SIZE);
+ST7735::BufferResult ST7735::allocateDmaBuffer(size_t bytes) {
+    if (bytes == 0 || bytes > std::numeric_limits<size_t>::max() - 3U) {
+        return Err<Detail::INVALID_BUFFER>("ST7735 DMA buffer size is invalid");
     }
 
     releaseDmaBuffer();
@@ -294,17 +289,17 @@ ST7735::Error ST7735::allocateDmaBuffer(size_t bytes) {
     const size_t alignedBytes = (bytes + 3U) & ~static_cast<size_t>(3U);
     m_dmaBuffer               = static_cast<uint8_t*>(heap_caps_malloc(alignedBytes, MALLOC_CAP_DMA | MALLOC_CAP_8BIT));
     if (m_dmaBuffer == nullptr) {
-        return makeError(StdError::NO_MEM, Detail::DMA_ALLOC_FAILED, ESP_ERR_NO_MEM);
+        return Err<Detail::DMA_ALLOCATE_FAILED>("ST7735 DMA buffer allocation failed");
     }
 
     m_dmaBufferSize = alignedBytes;
     m_ownsDmaBuffer = true;
-    return clearError();
+    return Ok();
 }
 
-ST7735::Error ST7735::setDmaBuffer(uint8_t* buffer, size_t bytes) {
-    if (buffer == nullptr || bytes == 0) {
-        return makeError(StdError::INVALID_ARGS, Detail::INVALID_PARAM, ESP_ERR_INVALID_ARG);
+ST7735::BufferResult ST7735::setDmaBuffer(uint8_t* buffer, size_t bytes) {
+    if (buffer == nullptr || bytes == 0 || !esp_ptr_dma_capable(buffer)) {
+        return Err<Detail::INVALID_BUFFER>("ST7735 external buffer is null, empty, or not DMA-capable");
     }
 
     releaseDmaBuffer();
@@ -313,60 +308,59 @@ ST7735::Error ST7735::setDmaBuffer(uint8_t* buffer, size_t bytes) {
     m_ownsDmaBuffer = false;
 
     if (m_dmaBufferSize == 0) {
-        return makeError(StdError::INVALID_SIZE, Detail::INVALID_PARAM, ESP_ERR_INVALID_SIZE);
+        return Err<Detail::INVALID_BUFFER>("ST7735 external DMA buffer must contain at least one RGB565 pixel");
     }
 
-    return clearError();
+    return Ok();
 }
 
-ST7735::Error ST7735::setBacklight(bool enabled) {
+ST7735::ControlResult ST7735::setBacklight(bool enabled) {
     if (!m_config.useBacklightPin) {
-        return clearError();
+        return Ok();
     }
 
     const esp_err_t err = gpio_set_level(m_config.backlightPin, enabled ? 1 : 0);
     if (err != ESP_OK) {
-        return makeError(toStdErr(err), Detail::GPIO_WRITE_FAILED, err);
+        return NativeErr<Detail::GPIO_WRITE_FAILED>(err, "ST7735 backlight GPIO write failed");
     }
 
-    return clearError();
+    return Ok();
 }
 
-ST7735::Error ST7735::fillScreen(uint16_t color) {
+ST7735::DrawResult ST7735::fillScreen(uint16_t color) {
     return fillRect(0, 0, m_config.width, m_config.height, color);
 }
 
-ST7735::Error ST7735::fillRect(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color) {
+ST7735::DrawResult ST7735::fillRect(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color) {
     if (!m_started) {
-        return makeError(StdError::INVALID_STATE, Detail::NOT_STARTED, ESP_ERR_INVALID_STATE);
+        return Err<Detail::NOT_STARTED>("ST7735 is not initialized");
     }
     if (!validWindow(x, y, width, height)) {
-        return makeError(StdError::INVALID_ARGS, Detail::INVALID_WINDOW, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_WINDOW>("ST7735 fill rectangle is outside the display");
     }
 
-    Error err = beginWriteRegion(x, y, width, height);
-    if (!err) {
-        return err;
-    }
+    const DrawResult regionResult = beginWriteRegion(x, y, width, height);
+    if (regionResult.is_err())
+        return regionResult;
 
     return writeRepeatedColor(color, static_cast<size_t>(width) * height);
 }
 
-ST7735::Error ST7735::drawPixel(uint16_t x, uint16_t y, uint16_t color) {
+ST7735::DrawResult ST7735::drawPixel(uint16_t x, uint16_t y, uint16_t color) {
     const uint8_t data[] {msb(color), lsb(color)};
     return pushPixels565(x, y, 1, 1, data);
 }
 
-ST7735::Error ST7735::drawChar(char value, uint16_t x, uint16_t y, uint16_t color) {
+ST7735::DrawResult ST7735::drawChar(char value, uint16_t x, uint16_t y, uint16_t color) {
     return drawChar(value, TextStyle {.x = x, .y = y, .color = color});
 }
 
-ST7735::Error ST7735::drawChar(char value, const TextStyle& style) {
+ST7735::DrawResult ST7735::drawChar(char value, const TextStyle& style) {
     if (!m_started) {
-        return makeError(StdError::INVALID_STATE, Detail::NOT_STARTED, ESP_ERR_INVALID_STATE);
+        return Err<Detail::NOT_STARTED>("ST7735 is not initialized");
     }
     if (!validTextStyle(style)) {
-        return makeError(StdError::INVALID_ARGS, Detail::TEXT_FAILED, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_TEXT_STYLE>("ST7735 text style is invalid");
     }
 
     if (style.transparent) {
@@ -376,16 +370,16 @@ ST7735::Error ST7735::drawChar(char value, const TextStyle& style) {
     return drawGlyphSolid(value, style.x, style.y, style);
 }
 
-ST7735::Error ST7735::drawText(const char* text, uint16_t x, uint16_t y, uint16_t color) {
+ST7735::DrawResult ST7735::drawText(const char* text, uint16_t x, uint16_t y, uint16_t color) {
     return drawText(text, TextStyle {.x = x, .y = y, .color = color});
 }
 
-ST7735::Error ST7735::drawText(const char* text, const TextStyle& style) {
+ST7735::DrawResult ST7735::drawText(const char* text, const TextStyle& style) {
     if (!m_started) {
-        return makeError(StdError::INVALID_STATE, Detail::NOT_STARTED, ESP_ERR_INVALID_STATE);
+        return Err<Detail::NOT_STARTED>("ST7735 is not initialized");
     }
     if (text == nullptr || !validTextStyle(style)) {
-        return makeError(StdError::INVALID_ARGS, Detail::TEXT_FAILED, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_TEXT_STYLE>("ST7735 text or text style is invalid");
     }
 
     const uint16_t cellWidth  = static_cast<uint16_t>(CellWidth * style.scale);
@@ -414,10 +408,9 @@ ST7735::Error ST7735::drawText(const char* text, const TextStyle& style) {
         glyphStyle.x         = cursorX;
         glyphStyle.y         = cursorY;
 
-        Error err = drawChar(value, glyphStyle);
-        if (!err) {
-            return err;
-        }
+        const DrawResult result = drawChar(value, glyphStyle);
+        if (result.is_err())
+            return result;
 
         cursorX = static_cast<uint16_t>(cursorX + cellWidth);
         if (!style.wrap && cursorX >= m_config.width) {
@@ -425,102 +418,111 @@ ST7735::Error ST7735::drawText(const char* text, const TextStyle& style) {
         }
     }
 
-    return clearError();
+    return Ok();
 }
 
-ST7735::Error ST7735::drawFrameBuffer(const FrameBuffer& frame, uint16_t x, uint16_t y, uint8_t* dmaBuffer, size_t dmaBufferBytes) {
+ST7735::DrawResult ST7735::drawFrameBuffer(const FrameBuffer& frame, uint16_t x, uint16_t y, uint8_t* dmaBuffer, size_t dmaBufferBytes) {
     if (!m_started) {
-        return makeError(StdError::INVALID_STATE, Detail::NOT_STARTED, ESP_ERR_INVALID_STATE);
+        return Err<Detail::NOT_STARTED>("ST7735 is not initialized");
     }
     if (!validFrameBuffer(frame) || !validWindow(x, y, frame.width, frame.height)) {
-        return makeError(StdError::INVALID_ARGS, Detail::INVALID_PARAM, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_BUFFER>("ST7735 framebuffer or destination window is invalid");
     }
     if (frame.stride != static_cast<size_t>(frame.width) * 2) {
-        return makeError(StdError::INVALID_ARGS, Detail::INVALID_PARAM, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_BUFFER>("ST7735 direct framebuffer drawing requires a packed RGB565 stride");
     }
 
     return drawFrame565(x, y, frame.width, frame.height, frame.data, dmaBuffer, dmaBufferBytes);
 }
 
-ST7735::Error ST7735::pushPixels565(uint16_t x, uint16_t y, uint16_t width, uint16_t height, const uint8_t* rgb565Be) {
+ST7735::DrawResult ST7735::pushPixels565(uint16_t x, uint16_t y, uint16_t width, uint16_t height, const uint8_t* rgb565Be) {
     if (!m_started) {
-        return makeError(StdError::INVALID_STATE, Detail::NOT_STARTED, ESP_ERR_INVALID_STATE);
+        return Err<Detail::NOT_STARTED>("ST7735 is not initialized");
     }
     if (!validWindow(x, y, width, height)) {
-        return makeError(StdError::INVALID_ARGS, Detail::INVALID_WINDOW, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_WINDOW>("ST7735 pixel window is invalid");
     }
     if (rgb565Be == nullptr) {
-        return makeError(StdError::INVALID_ARGS, Detail::DATA_FAILED, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_BUFFER>("ST7735 RGB565 pixel buffer is null");
     }
 
-    Error err = beginWriteRegion(x, y, width, height);
-    if (!err) {
-        return err;
-    }
+    const DrawResult regionResult = beginWriteRegion(x, y, width, height);
+    if (regionResult.is_err())
+        return regionResult;
 
     return writePixels565(rgb565Be, frameSize(width, height));
 }
 
-ST7735::Error ST7735::beginWriteRegion(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
+ST7735::DrawResult ST7735::beginWriteRegion(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
     if (!m_started) {
-        return makeError(StdError::INVALID_STATE, Detail::NOT_STARTED, ESP_ERR_INVALID_STATE);
+        return Err<Detail::NOT_STARTED>("ST7735 is not initialized");
     }
     if (!validWindow(x, y, width, height)) {
-        return makeError(StdError::INVALID_ARGS, Detail::INVALID_WINDOW, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_WINDOW>("ST7735 write region is invalid");
     }
 
-    Error err = setAddressWindow(x, y, width, height);
-    if (!err) {
-        return err;
+    IoResult ioResult = setAddressWindow(x, y, width, height);
+    if (ioResult.is_err())
+        return ioResult.propagate();
+
+    ioResult = writeCommand(CmdRamWr);
+    if (ioResult.is_err()) {
+        m_regionBytesRemaining = 0;
+        return ioResult.propagate();
     }
 
-    err = writeCommand(CmdRamWr);
-    if (!err) {
-        m_regionOpen = false;
-        return err;
-    }
-
-    m_regionOpen = true;
-    return clearError();
+    m_regionBytesRemaining = frameSize(width, height);
+    return Ok();
 }
 
-ST7735::Error ST7735::writePixels565(const uint8_t* rgb565Be, size_t length) {
-    if (!m_started || !m_regionOpen) {
-        return makeError(StdError::INVALID_STATE, Detail::NOT_STARTED, ESP_ERR_INVALID_STATE);
-    }
+ST7735::DrawResult ST7735::writePixels565(const uint8_t* rgb565Be, size_t length) {
+    if (!m_started)
+        return Err<Detail::NOT_STARTED>("ST7735 is not initialized");
+    if (m_regionBytesRemaining == 0)
+        return Err<Detail::REGION_NOT_OPEN>("ST7735 has no active write region");
+    if ((length & 1U) != 0)
+        return Err<Detail::INVALID_BUFFER>("ST7735 RGB565 byte count must be even");
+    if (length > m_regionBytesRemaining)
+        return Err<Detail::REGION_OVERFLOW>("ST7735 pixel data exceeds the active write region");
 
-    return writeData(rgb565Be, length);
+    const IoResult ioResult = writeData(rgb565Be, length);
+    if (ioResult.is_err())
+        return ioResult.propagate();
+    m_regionBytesRemaining -= length;
+    return Ok();
 }
 
-ST7735::Error ST7735::writeColor(uint16_t color, size_t pixels) {
-    if (!m_started || !m_regionOpen) {
-        return makeError(StdError::INVALID_STATE, Detail::NOT_STARTED, ESP_ERR_INVALID_STATE);
-    }
+ST7735::DrawResult ST7735::writeColor(uint16_t color, size_t pixels) {
+    if (!m_started)
+        return Err<Detail::NOT_STARTED>("ST7735 is not initialized");
+    if (m_regionBytesRemaining == 0)
+        return Err<Detail::REGION_NOT_OPEN>("ST7735 has no active write region");
+    if (pixels > m_regionBytesRemaining / 2)
+        return Err<Detail::REGION_OVERFLOW>("ST7735 color data exceeds the active write region");
 
     return writeRepeatedColor(color, pixels);
 }
 
-ST7735::Error ST7735::drawFrame565(uint16_t       x,
-                                   uint16_t       y,
-                                   uint16_t       width,
-                                   uint16_t       height,
-                                   const uint8_t* rgb565Be,
-                                   uint8_t*       dmaBuffer,
-                                   size_t         dmaBufferBytes) {
+ST7735::DrawResult ST7735::drawFrame565(uint16_t       x,
+                                        uint16_t       y,
+                                        uint16_t       width,
+                                        uint16_t       height,
+                                        const uint8_t* rgb565Be,
+                                        uint8_t*       dmaBuffer,
+                                        size_t         dmaBufferBytes) {
     if (!m_started) {
-        return makeError(StdError::INVALID_STATE, Detail::NOT_STARTED, ESP_ERR_INVALID_STATE);
+        return Err<Detail::NOT_STARTED>("ST7735 is not initialized");
     }
     if (!validWindow(x, y, width, height)) {
-        return makeError(StdError::INVALID_ARGS, Detail::INVALID_WINDOW, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_WINDOW>("ST7735 frame destination window is invalid");
     }
     if (rgb565Be == nullptr) {
-        return makeError(StdError::INVALID_ARGS, Detail::DATA_FAILED, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_BUFFER>("ST7735 frame buffer is null");
     }
 
-    Error err = beginWriteRegion(x, y, width, height);
-    if (!err) {
-        return err;
-    }
+    DrawResult drawResult = beginWriteRegion(x, y, width, height);
+    if (drawResult.is_err())
+        return drawResult;
 
     const size_t totalBytes = frameSize(width, height);
     dmaBuffer               = dmaBufferOr(dmaBuffer);
@@ -531,7 +533,7 @@ ST7735::Error ST7735::drawFrame565(uint16_t       x,
 
     const size_t chunkBytes = dmaBufferBytes & ~static_cast<size_t>(1U);
     if (chunkBytes == 0) {
-        return makeError(StdError::INVALID_SIZE, Detail::INVALID_PARAM, ESP_ERR_INVALID_SIZE);
+        return Err<Detail::INVALID_BUFFER>("ST7735 DMA buffer is too small for one RGB565 pixel");
     }
 
     size_t offset = 0;
@@ -539,25 +541,24 @@ ST7735::Error ST7735::drawFrame565(uint16_t       x,
         const size_t count = std::min(totalBytes - offset, chunkBytes);
         std::memcpy(dmaBuffer, rgb565Be + offset, count);
 
-        err = writePixels565(dmaBuffer, count);
-        if (!err) {
-            return err;
-        }
+        drawResult = writePixels565(dmaBuffer, count);
+        if (drawResult.is_err())
+            return drawResult;
 
         offset += count;
     }
 
-    return clearError();
+    return Ok();
 }
 
-ST7735::Error ST7735::drawAnimationFrame(const AnimationView& animation,
-                                         uint16_t             frameIndex,
-                                         uint16_t             x,
-                                         uint16_t             y,
-                                         uint8_t*             dmaBuffer,
-                                         size_t               dmaBufferBytes) {
+ST7735::DrawResult ST7735::drawAnimationFrame(const AnimationView& animation,
+                                              uint16_t             frameIndex,
+                                              uint16_t             x,
+                                              uint16_t             y,
+                                              uint8_t*             dmaBuffer,
+                                              size_t               dmaBufferBytes) {
     if (!validAnimation(animation)) {
-        return makeError(StdError::INVALID_ARGS, Detail::INVALID_PARAM, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_BUFFER>("ST7735 animation view is invalid");
     }
 
     const uint16_t safeIndex = static_cast<uint16_t>(frameIndex % animation.frameCount);
@@ -565,17 +566,17 @@ ST7735::Error ST7735::drawAnimationFrame(const AnimationView& animation,
     return drawFrame565(x, y, animation.width, animation.height, frame, dmaBuffer, dmaBufferBytes);
 }
 
-ST7735::Error ST7735::drawAnimationFrameLocked(const AnimationView& animation,
-                                               AnimationPlayer&     player,
-                                               uint16_t             x,
-                                               uint16_t             y,
-                                               uint8_t*             dmaBuffer,
-                                               size_t               dmaBufferBytes) {
+ST7735::DrawResult ST7735::drawAnimationFrameLocked(const AnimationView& animation,
+                                                    AnimationPlayer&     player,
+                                                    uint16_t             x,
+                                                    uint16_t             y,
+                                                    uint8_t*             dmaBuffer,
+                                                    size_t               dmaBufferBytes) {
     if (!validAnimation(animation)) {
-        return makeError(StdError::INVALID_ARGS, Detail::INVALID_PARAM, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_BUFFER>("ST7735 animation view is invalid");
     }
     if (animation.frameDurationsMs == nullptr && (player.fallbackFps < MinFps || player.fallbackFps > MaxFps)) {
-        return makeError(StdError::INVALID_ARGS, Detail::INVALID_PARAM, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_BUFFER>("ST7735 animation fallback FPS is invalid");
     }
 
     const uint16_t currentFrame = static_cast<uint16_t>(player.frameIndex % animation.frameCount);
@@ -594,10 +595,9 @@ ST7735::Error ST7735::drawAnimationFrameLocked(const AnimationView& animation,
         }
     }
 
-    Error err = drawAnimationFrame(animation, currentFrame, x, y, dmaBuffer, dmaBufferBytes);
-    if (!err) {
-        return err;
-    }
+    const DrawResult drawResult = drawAnimationFrame(animation, currentFrame, x, y, dmaBuffer, dmaBufferBytes);
+    if (drawResult.is_err())
+        return drawResult;
 
     const uint16_t durationMs      = animation.frameDurationsMs != nullptr ? std::max<uint16_t>(animation.frameDurationsMs[currentFrame], 1) : static_cast<uint16_t>(std::max<int64_t>(1000LL / player.fallbackFps, 1));
     const int64_t  frameIntervalUs = static_cast<int64_t>(durationMs) * 1000LL;
@@ -610,15 +610,11 @@ ST7735::Error ST7735::drawAnimationFrameLocked(const AnimationView& animation,
         player.nextFrameUs = nowUs + frameIntervalUs;
     }
 
-    return clearError();
+    return Ok();
 }
 
 bool ST7735::started() const {
     return m_started;
-}
-
-ST7735::Error ST7735::lastError() const {
-    return m_lastError;
 }
 
 uint16_t ST7735::width() const {
@@ -637,9 +633,9 @@ size_t ST7735::dmaBufferBytes() const {
     return m_dmaBufferSize;
 }
 
-bool ST7735::clearFrame(FrameBuffer& frame, uint16_t color) {
+ST7735::FrameResult ST7735::clearFrame(FrameBuffer& frame, uint16_t color) {
     if (!validFrameBuffer(frame)) {
-        return false;
+        return Err<Detail::INVALID_BUFFER>("ST7735 framebuffer is invalid");
     }
 
     const uint8_t hi = msb(color);
@@ -652,15 +648,15 @@ bool ST7735::clearFrame(FrameBuffer& frame, uint16_t color) {
         }
     }
 
-    return true;
+    return Ok();
 }
 
-bool ST7735::copyFrame(FrameBuffer& frame, const uint8_t* rgb565Be, uint16_t width, uint16_t height, size_t stride) {
+ST7735::FrameResult ST7735::copyFrame(FrameBuffer& frame, const uint8_t* rgb565Be, uint16_t width, uint16_t height, size_t stride) {
     if (!validFrameBuffer(frame) || rgb565Be == nullptr || width == 0 || height == 0 || stride < static_cast<size_t>(width) * 2) {
-        return false;
+        return Err<Detail::INVALID_BUFFER>("ST7735 source or destination framebuffer is invalid");
     }
     if (width > frame.width || height > frame.height) {
-        return false;
+        return Err<Detail::INVALID_WINDOW>("ST7735 source frame does not fit the destination framebuffer");
     }
 
     const size_t rowBytes = static_cast<size_t>(width) * 2;
@@ -668,15 +664,15 @@ bool ST7735::copyFrame(FrameBuffer& frame, const uint8_t* rgb565Be, uint16_t wid
         std::memcpy(frame.data + static_cast<size_t>(y) * frame.stride, rgb565Be + static_cast<size_t>(y) * stride, rowBytes);
     }
 
-    return true;
+    return Ok();
 }
 
-bool ST7735::copyAnimationFrame(FrameBuffer& frame, const AnimationView& animation, uint16_t frameIndex) {
+ST7735::FrameResult ST7735::copyAnimationFrame(FrameBuffer& frame, const AnimationView& animation, uint16_t frameIndex) {
     if (!validAnimation(animation) || !validFrameBuffer(frame)) {
-        return false;
+        return Err<Detail::INVALID_BUFFER>("ST7735 animation or destination framebuffer is invalid");
     }
     if (animation.width > frame.width || animation.height > frame.height) {
-        return false;
+        return Err<Detail::INVALID_WINDOW>("ST7735 animation frame does not fit the destination framebuffer");
     }
 
     const uint16_t safeIndex = static_cast<uint16_t>(frameIndex % animation.frameCount);
@@ -684,10 +680,11 @@ bool ST7735::copyAnimationFrame(FrameBuffer& frame, const AnimationView& animati
     return copyFrame(frame, source, animation.width, animation.height, static_cast<size_t>(animation.width) * 2);
 }
 
-bool ST7735::fillFrameRect(FrameBuffer& frame, uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color) {
-    if (!validFrameBuffer(frame) || width == 0 || height == 0 || x >= frame.width || y >= frame.height) {
-        return false;
-    }
+ST7735::FrameResult ST7735::fillFrameRect(FrameBuffer& frame, uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color) {
+    if (!validFrameBuffer(frame))
+        return Err<Detail::INVALID_BUFFER>("ST7735 framebuffer is invalid");
+    if (width == 0 || height == 0 || x >= frame.width || y >= frame.height)
+        return Err<Detail::INVALID_WINDOW>("ST7735 framebuffer rectangle is invalid");
 
     const uint16_t clippedWidth  = std::min<uint16_t>(width, static_cast<uint16_t>(frame.width - x));
     const uint16_t clippedHeight = std::min<uint16_t>(height, static_cast<uint16_t>(frame.height - y));
@@ -702,13 +699,14 @@ bool ST7735::fillFrameRect(FrameBuffer& frame, uint16_t x, uint16_t y, uint16_t 
         }
     }
 
-    return true;
+    return Ok();
 }
 
-bool ST7735::drawFrameChar(FrameBuffer& frame, char value, const TextStyle& style) {
-    if (!validFrameBuffer(frame) || style.scale == 0 || style.x >= frame.width || style.y >= frame.height) {
-        return false;
-    }
+ST7735::FrameResult ST7735::drawFrameChar(FrameBuffer& frame, char value, const TextStyle& style) {
+    if (!validFrameBuffer(frame))
+        return Err<Detail::INVALID_BUFFER>("ST7735 framebuffer is invalid");
+    if (style.scale == 0 || style.x >= frame.width || style.y >= frame.height)
+        return Err<Detail::INVALID_TEXT_STYLE>("ST7735 framebuffer text style is invalid");
 
     const uint16_t glyphWidth  = static_cast<uint16_t>(CellWidth * style.scale);
     const uint16_t glyphHeight = static_cast<uint16_t>(CellHeight * style.scale);
@@ -727,13 +725,14 @@ bool ST7735::drawFrameChar(FrameBuffer& frame, char value, const TextStyle& styl
         }
     }
 
-    return true;
+    return Ok();
 }
 
-bool ST7735::drawFrameText(FrameBuffer& frame, const char* text, const TextStyle& style) {
-    if (!validFrameBuffer(frame) || text == nullptr || style.scale == 0 || style.x >= frame.width || style.y >= frame.height) {
-        return false;
-    }
+ST7735::FrameResult ST7735::drawFrameText(FrameBuffer& frame, const char* text, const TextStyle& style) {
+    if (!validFrameBuffer(frame))
+        return Err<Detail::INVALID_BUFFER>("ST7735 framebuffer is invalid");
+    if (text == nullptr || style.scale == 0 || style.x >= frame.width || style.y >= frame.height)
+        return Err<Detail::INVALID_TEXT_STYLE>("ST7735 framebuffer text or style is invalid");
 
     const uint16_t cellWidth  = static_cast<uint16_t>(CellWidth * style.scale);
     const uint16_t cellHeight = static_cast<uint16_t>(CellHeight * style.scale);
@@ -757,12 +756,12 @@ bool ST7735::drawFrameText(FrameBuffer& frame, const char* text, const TextStyle
             break;
         }
 
-        TextStyle glyphStyle = style;
-        glyphStyle.x         = cursorX;
-        glyphStyle.y         = cursorY;
-        if (!drawFrameChar(frame, value, glyphStyle)) {
-            return false;
-        }
+        TextStyle glyphStyle          = style;
+        glyphStyle.x                  = cursorX;
+        glyphStyle.y                  = cursorY;
+        const FrameResult glyphResult = drawFrameChar(frame, value, glyphStyle);
+        if (glyphResult.is_err())
+            return glyphResult;
 
         cursorX = static_cast<uint16_t>(cursorX + cellWidth);
         if (!style.wrap && cursorX >= frame.width) {
@@ -770,7 +769,7 @@ bool ST7735::drawFrameText(FrameBuffer& frame, const char* text, const TextStyle
         }
     }
 
-    return true;
+    return Ok();
 }
 
 ST7735::Config ST7735::makeConfig(Orientation orientation) {
@@ -844,39 +843,6 @@ ST7735::TextBounds ST7735::measureText(const char* text, uint8_t scale) {
     return TextBounds {.width = maxWidth, .height = static_cast<uint16_t>(lines * cellHeight)};
 }
 
-const char* ST7735::detailName(Detail detail) noexcept {
-    switch (detail) {
-        case Detail::NONE:
-            return "NONE";
-        case Detail::NOT_STARTED:
-            return "NOT_STARTED";
-        case Detail::ALREADY_STARTED:
-            return "ALREADY_STARTED";
-        case Detail::INVALID_PARAM:
-            return "INVALID_PARAM";
-        case Detail::INVALID_WINDOW:
-            return "INVALID_WINDOW";
-        case Detail::GPIO_CONFIG_FAILED:
-            return "GPIO_CONFIG_FAILED";
-        case Detail::GPIO_WRITE_FAILED:
-            return "GPIO_WRITE_FAILED";
-        case Detail::RESET_FAILED:
-            return "RESET_FAILED";
-        case Detail::DMA_ALLOC_FAILED:
-            return "DMA_ALLOC_FAILED";
-        case Detail::COMMAND_FAILED:
-            return "COMMAND_FAILED";
-        case Detail::DATA_FAILED:
-            return "DATA_FAILED";
-        case Detail::TEXT_FAILED:
-            return "TEXT_FAILED";
-        case Detail::SPI_FAILED:
-            return "SPI_FAILED";
-    }
-
-    return "UNKNOWN";
-}
-
 const char* ST7735::orientationName(Orientation orientation) noexcept {
     switch (orientation) {
         case Orientation::Portrait:
@@ -892,7 +858,7 @@ const char* ST7735::orientationName(Orientation orientation) noexcept {
     return "Unknown";
 }
 
-ST7735::Error ST7735::configurePins() {
+ST7735::PinResult ST7735::configurePins() {
     uint64_t pinMask = 1ULL << static_cast<uint8_t>(m_config.dcPin);
     if (m_config.useResetPin) {
         pinMask |= 1ULL << static_cast<uint8_t>(m_config.resetPin);
@@ -910,93 +876,98 @@ ST7735::Error ST7735::configurePins() {
 
     const esp_err_t err = gpio_config(&config);
     if (err != ESP_OK) {
-        return makeError(toStdErr(err), Detail::GPIO_CONFIG_FAILED, err);
+        return NativeErr<Detail::GPIO_CONFIG_FAILED>(err, "ST7735 GPIO configuration failed");
     }
 
     if (m_config.useBacklightPin) {
-        gpio_set_level(m_config.backlightPin, 0);
+        const esp_err_t backlightResult = gpio_set_level(m_config.backlightPin, 0);
+        if (backlightResult != ESP_OK)
+            return NativeErr<Detail::GPIO_CONFIG_FAILED>(backlightResult, "ST7735 initial backlight GPIO write failed");
     }
-    gpio_set_level(m_config.dcPin, 1);
+    const esp_err_t dcResult = gpio_set_level(m_config.dcPin, 1);
+    if (dcResult != ESP_OK)
+        return NativeErr<Detail::GPIO_CONFIG_FAILED>(dcResult, "ST7735 initial data/command GPIO write failed");
     if (m_config.useResetPin) {
-        gpio_set_level(m_config.resetPin, 1);
+        const esp_err_t resetResult = gpio_set_level(m_config.resetPin, 1);
+        if (resetResult != ESP_OK)
+            return NativeErr<Detail::GPIO_CONFIG_FAILED>(resetResult, "ST7735 initial reset GPIO write failed");
     }
 
-    return clearError();
+    return Ok();
 }
 
-ST7735::Error ST7735::hardwareReset() {
+ST7735::ResetResult ST7735::hardwareReset() {
     if (!m_config.useResetPin) {
-        return clearError();
+        return Ok();
     }
 
-    if (gpio_set_level(m_config.resetPin, 1) != ESP_OK ||
-        gpio_set_level(m_config.resetPin, 0) != ESP_OK) {
-        return makeError(StdError::FAIL, Detail::RESET_FAILED, ESP_FAIL);
-    }
+    esp_err_t result = gpio_set_level(m_config.resetPin, 1);
+    if (result != ESP_OK)
+        return NativeErr<Detail::RESET_FAILED>(result, "ST7735 reset GPIO could not be driven high");
+    result = gpio_set_level(m_config.resetPin, 0);
+    if (result != ESP_OK)
+        return NativeErr<Detail::RESET_FAILED>(result, "ST7735 reset GPIO could not be driven low");
     vTaskDelay(pdMS_TO_TICKS(20));
 
-    if (gpio_set_level(m_config.resetPin, 1) != ESP_OK) {
-        return makeError(StdError::FAIL, Detail::RESET_FAILED, ESP_FAIL);
-    }
+    result = gpio_set_level(m_config.resetPin, 1);
+    if (result != ESP_OK)
+        return NativeErr<Detail::RESET_FAILED>(result, "ST7735 reset GPIO could not be released");
     vTaskDelay(pdMS_TO_TICKS(120));
 
-    return clearError();
+    return Ok();
 }
 
-ST7735::Error ST7735::writeCommand(uint8_t command) {
-    m_regionOpen = false;
+ST7735::IoResult ST7735::writeCommand(uint8_t command) {
+    m_regionBytesRemaining = 0;
 
     const esp_err_t err = gpio_set_level(m_config.dcPin, 0);
     if (err != ESP_OK) {
-        return makeError(toStdErr(err), Detail::GPIO_WRITE_FAILED, err);
+        return NativeErr<Detail::GPIO_WRITE_FAILED>(err, "ST7735 data/command GPIO write failed");
     }
 
-    SPI::Error spiErr = m_spi.write(m_deviceIndex, &command, 1);
-    if (!spiErr) {
-        return mapSpiError(spiErr, Detail::COMMAND_FAILED);
-    }
+    const SPI::TransferResult spiResult = m_spi.write(m_deviceIndex, &command, 1);
+    if (spiResult.is_err())
+        return spiResult.propagate<Detail::SPI_TRANSFER_FAILED>("ST7735 command transfer failed");
 
-    return clearError();
+    return Ok();
 }
 
-ST7735::Error ST7735::writeData(const uint8_t* data, size_t length) {
+ST7735::IoResult ST7735::writeData(const uint8_t* data, size_t length) {
     if (length == 0) {
-        return clearError();
+        return Ok();
     }
     if (data == nullptr) {
-        return makeError(StdError::INVALID_ARGS, Detail::DATA_FAILED, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_BUFFER>("ST7735 transfer buffer is null");
     }
 
     const esp_err_t err = gpio_set_level(m_config.dcPin, 1);
     if (err != ESP_OK) {
-        return makeError(toStdErr(err), Detail::GPIO_WRITE_FAILED, err);
+        return NativeErr<Detail::GPIO_WRITE_FAILED>(err, "ST7735 data/command GPIO write failed");
     }
 
     size_t offset = 0;
     while (offset < length) {
-        const size_t chunk  = std::min(length - offset, DataChunk);
-        SPI::Error   spiErr = m_spi.write(m_deviceIndex, data + offset, chunk);
-        if (!spiErr) {
-            return mapSpiError(spiErr, Detail::DATA_FAILED);
-        }
+        const size_t              chunk     = std::min(length - offset, DataChunk);
+        const SPI::TransferResult spiResult = m_spi.write(m_deviceIndex, data + offset, chunk);
+        if (spiResult.is_err())
+            return spiResult.propagate<Detail::SPI_TRANSFER_FAILED>("ST7735 data transfer failed");
         offset += chunk;
     }
 
-    return clearError();
+    return Ok();
 }
 
-ST7735::Error ST7735::writeCommandData(uint8_t command, const uint8_t* data, size_t length) {
-    Error err = writeCommand(command);
-    if (!err) {
-        return err;
-    }
+ST7735::IoResult ST7735::writeCommandData(uint8_t command, const uint8_t* data, size_t length) {
+    const IoResult commandResult = writeCommand(command);
+    if (commandResult.is_err())
+        return commandResult;
 
     return writeData(data, length);
 }
 
-ST7735::Error ST7735::setAddressWindow(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
+ST7735::IoResult ST7735::setAddressWindow(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
     if (!validWindow(x, y, width, height)) {
-        return makeError(StdError::INVALID_ARGS, Detail::INVALID_WINDOW, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_WINDOW>("ST7735 address window is invalid");
     }
 
     const uint16_t x0 = static_cast<uint16_t>(x + m_config.columnOffset);
@@ -1007,15 +978,14 @@ ST7735::Error ST7735::setAddressWindow(uint16_t x, uint16_t y, uint16_t width, u
     const uint8_t columnData[] {msb(x0), lsb(x0), msb(x1), lsb(x1)};
     const uint8_t rowData[] {msb(y0), lsb(y0), msb(y1), lsb(y1)};
 
-    Error err = writeCommandData(CmdCaseT, columnData, sizeof(columnData));
-    if (!err) {
-        return err;
-    }
+    const IoResult columnResult = writeCommandData(CmdCaseT, columnData, sizeof(columnData));
+    if (columnResult.is_err())
+        return columnResult;
 
     return writeCommandData(CmdRaseT, rowData, sizeof(rowData));
 }
 
-ST7735::Error ST7735::writeRepeatedColor(uint16_t color, size_t pixels) {
+ST7735::DrawResult ST7735::writeRepeatedColor(uint16_t color, size_t pixels) {
     constexpr size_t StackFallbackBytes = 128;
     uint8_t          stackChunk[StackFallbackBytes] {};
     uint8_t*         chunk      = dmaBufferOr(nullptr);
@@ -1033,26 +1003,25 @@ ST7735::Error ST7735::writeRepeatedColor(uint16_t color, size_t pixels) {
     }
 
     while (pixels > 0) {
-        const size_t chunkPixels = std::min(pixels, chunkBytes / 2);
-        Error        err         = writeData(chunk, chunkPixels * 2);
-        if (!err) {
-            return err;
-        }
+        const size_t     chunkPixels = std::min(pixels, chunkBytes / 2);
+        const DrawResult result      = writePixels565(chunk, chunkPixels * 2);
+        if (result.is_err())
+            return result;
         pixels -= chunkPixels;
     }
 
-    return clearError();
+    return Ok();
 }
 
-ST7735::Error ST7735::drawGlyphSolid(char value, uint16_t x, uint16_t y, const TextStyle& style) {
+ST7735::DrawResult ST7735::drawGlyphSolid(char value, uint16_t x, uint16_t y, const TextStyle& style) {
     if (x >= m_config.width || y >= m_config.height) {
-        return clearError();
+        return Ok();
     }
 
     uint8_t* dmaBuffer = dmaBufferOr(nullptr);
     size_t   dmaBytes  = dmaBufferBytesOr(0);
     if (dmaBuffer == nullptr || dmaBytes < 2) {
-        return makeError(StdError::INVALID_STATE, Detail::DMA_ALLOC_FAILED, ESP_ERR_INVALID_STATE);
+        return Err<Detail::DMA_ALLOCATE_FAILED>("ST7735 solid text drawing requires a DMA buffer");
     }
 
     const uint16_t glyphWidth    = static_cast<uint16_t>(CellWidth * style.scale);
@@ -1062,33 +1031,30 @@ ST7735::Error ST7735::drawGlyphSolid(char value, uint16_t x, uint16_t y, const T
     const size_t   bytesPerRow   = static_cast<size_t>(visibleWidth) * 2;
     const uint16_t rowsPerChunk  = static_cast<uint16_t>(std::max<size_t>(1, dmaBytes / bytesPerRow));
 
-    Error err = beginWriteRegion(x, y, visibleWidth, visibleHeight);
-    if (!err) {
-        return err;
-    }
+    DrawResult drawResult = beginWriteRegion(x, y, visibleWidth, visibleHeight);
+    if (drawResult.is_err())
+        return drawResult;
 
     uint16_t row = 0;
     while (row < visibleHeight) {
         const uint16_t rows = std::min<uint16_t>(static_cast<uint16_t>(visibleHeight - row), rowsPerChunk);
-        err                 = fillGlyphRows(value, x, y, visibleWidth, row, rows, style, dmaBuffer);
-        if (!err) {
-            return err;
-        }
+        drawResult          = fillGlyphRows(value, x, y, visibleWidth, row, rows, style, dmaBuffer);
+        if (drawResult.is_err())
+            return drawResult;
 
-        err = writePixels565(dmaBuffer, static_cast<size_t>(rows) * bytesPerRow);
-        if (!err) {
-            return err;
-        }
+        drawResult = writePixels565(dmaBuffer, static_cast<size_t>(rows) * bytesPerRow);
+        if (drawResult.is_err())
+            return drawResult;
 
         row = static_cast<uint16_t>(row + rows);
     }
 
-    return clearError();
+    return Ok();
 }
 
-ST7735::Error ST7735::drawGlyphTransparent(char value, uint16_t x, uint16_t y, const TextStyle& style) {
+ST7735::DrawResult ST7735::drawGlyphTransparent(char value, uint16_t x, uint16_t y, const TextStyle& style) {
     if (x >= m_config.width || y >= m_config.height) {
-        return clearError();
+        return Ok();
     }
 
     const uint16_t glyphWidth  = static_cast<uint16_t>(CellWidth * style.scale);
@@ -1111,35 +1077,33 @@ ST7735::Error ST7735::drawGlyphTransparent(char value, uint16_t x, uint16_t y, c
             }
 
             if (runLen > 0) {
-                Error err = fillRect(static_cast<uint16_t>(x + runStart), static_cast<uint16_t>(y + py), runLen, 1, style.color);
-                if (!err) {
-                    return err;
-                }
+                const DrawResult result = fillRect(static_cast<uint16_t>(x + runStart), static_cast<uint16_t>(y + py), runLen, 1, style.color);
+                if (result.is_err())
+                    return result;
                 runLen = 0;
             }
         }
 
         if (runLen > 0) {
-            Error err = fillRect(static_cast<uint16_t>(x + runStart), static_cast<uint16_t>(y + py), runLen, 1, style.color);
-            if (!err) {
-                return err;
-            }
+            const DrawResult result = fillRect(static_cast<uint16_t>(x + runStart), static_cast<uint16_t>(y + py), runLen, 1, style.color);
+            if (result.is_err())
+                return result;
         }
     }
 
-    return clearError();
+    return Ok();
 }
 
-ST7735::Error ST7735::fillGlyphRows(char value,
-                                    uint16_t,
-                                    uint16_t,
-                                    uint16_t         visibleWidth,
-                                    uint16_t         rowOffset,
-                                    uint16_t         rows,
-                                    const TextStyle& style,
-                                    uint8_t*         out) {
+ST7735::DrawResult ST7735::fillGlyphRows(char value,
+                                         uint16_t,
+                                         uint16_t,
+                                         uint16_t         visibleWidth,
+                                         uint16_t         rowOffset,
+                                         uint16_t         rows,
+                                         const TextStyle& style,
+                                         uint8_t*         out) {
     if (out == nullptr || visibleWidth == 0 || rows == 0) {
-        return makeError(StdError::INVALID_ARGS, Detail::TEXT_FAILED, ESP_ERR_INVALID_ARG);
+        return Err<Detail::INVALID_TEXT_STYLE>("ST7735 glyph output buffer or dimensions are invalid");
     }
 
     size_t offset = 0;
@@ -1152,21 +1116,7 @@ ST7735::Error ST7735::fillGlyphRows(char value,
         }
     }
 
-    return clearError();
-}
-
-ST7735::Error ST7735::makeError(StdError code, Detail detail, esp_err_t native, SPI::Error spi) {
-    m_lastError = Error {.code = code, .detail = detail, .spi = spi, .native = native};
-    return m_lastError;
-}
-
-ST7735::Error ST7735::mapSpiError(SPI::Error spi, Detail detail) {
-    return makeError(spi.code, detail, spi.native, spi);
-}
-
-ST7735::Error ST7735::clearError() {
-    m_lastError = Error {};
-    return m_lastError;
+    return Ok();
 }
 
 bool ST7735::validWindow(uint16_t x, uint16_t y, uint16_t width, uint16_t height) const {

@@ -24,20 +24,19 @@ public:
 
     struct Config
     {
-        const char*   deviceName  = ble_agent_light::protocol::DefaultDeviceName;
-        const char*   serviceUuid = ble_agent_light::protocol::DefaultServiceUuid;
-        const char*   infoUuid    = ble_agent_light::protocol::DefaultInfoUuid;
-        const char*   commandUuid = ble_agent_light::protocol::DefaultCommandUuid;
-        const char*   eventUuid   = ble_agent_light::protocol::DefaultEventUuid;
-        EventHandlers handlers {};
+        const char* deviceName  = ble_agent_light::protocol::DefaultDeviceName;
+        const char* serviceUuid = ble_agent_light::protocol::DefaultServiceUuid;
+        const char* infoUuid    = ble_agent_light::protocol::DefaultInfoUuid;
+        const char* commandUuid = ble_agent_light::protocol::DefaultCommandUuid;
+        const char* eventUuid   = ble_agent_light::protocol::DefaultEventUuid;
     };
 
     using SetupErrorCode = ble_agent_light::BleGattTransport::SetupErrorCode;
     using SetupErrors    = ble_agent_light::BleGattTransport::SetupErrors;
     using SetupResult    = ble_agent_light::BleGattTransport::SetupResult;
 
-    BleAgentLightService();
-    explicit BleAgentLightService(const Config& config);
+    explicit BleAgentLightService(ble_agent_light::AgentRegistry& registry);
+    BleAgentLightService(ble_agent_light::AgentRegistry& registry, const Config& config);
     BleAgentLightService(const BleAgentLightService&)            = delete;
     BleAgentLightService& operator=(const BleAgentLightService&) = delete;
     BleAgentLightService(BleAgentLightService&&)                 = delete;
@@ -60,6 +59,6 @@ private:
     void sendStatus(uint8_t opcode, Status status, uint8_t id = NoAgent);
 
     Config                            m_config;
-    ble_agent_light::AgentRegistry    m_registry;
+    ble_agent_light::AgentRegistry&   m_registry;
     ble_agent_light::BleGattTransport m_transport;
 };

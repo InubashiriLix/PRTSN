@@ -1,7 +1,6 @@
 #include "src/svc/inc/BleAgentLight/BleAgentLight.h"
 
 #include <Arduino.h>
-#include <BLE2902.h>
 #include <BLEAdvertising.h>
 #include <BLEDevice.h>
 #include <BLESecurity.h>
@@ -53,7 +52,6 @@ namespace ble_agent_light
 
         info->setValue(protocol::ProtocolInfo.data(), protocol::ProtocolInfo.size());
         commandRx->setCallbacks(&m_adapter);
-        m_eventTx->addDescriptor(new BLE2902());
 
         if (!service->start())
             return Err<SetupErrorCode::ServiceStartFailed>();
@@ -115,12 +113,14 @@ namespace ble_agent_light
     }
 }
 
-BleAgentLightService::BleAgentLightService()
-    : BleAgentLightService(Config {}) {}
+BleAgentLightService::BleAgentLightService(ble_agent_light::AgentRegistry& registry)
+    : BleAgentLightService(registry, Config {}) {}
 
-BleAgentLightService::BleAgentLightService(const Config& config)
+BleAgentLightService::BleAgentLightService(
+    ble_agent_light::AgentRegistry& registry,
+    const Config&                   config)
     : m_config(config),
-      m_registry(config.handlers),
+      m_registry(registry),
       m_transport(
           {
               config.deviceName,

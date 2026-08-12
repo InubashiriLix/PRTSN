@@ -1,6 +1,7 @@
 #pragma once
 
 #include "driver/gpio.h"
+#include "src/fw/inc/Result.h"
 #include "src/fw/inc/spi.h"
 #include "src/fw/inc/std_err.h"
 
@@ -95,35 +96,19 @@ public:
 
     enum class Detail : uint8_t
     {
-        NONE = 0,
-        NOT_STARTED,
+        NOT_STARTED = 1,
         ALREADY_STARTED,
-        INVALID_PARAM,
+        INVALID_CONFIG,
         INVALID_WINDOW,
+        INVALID_BUFFER,
+        INVALID_TEXT_STYLE,
+        REGION_NOT_OPEN,
+        REGION_OVERFLOW,
         GPIO_CONFIG_FAILED,
         GPIO_WRITE_FAILED,
         RESET_FAILED,
-        DMA_ALLOC_FAILED,
-        COMMAND_FAILED,
-        DATA_FAILED,
-        TEXT_FAILED,
-        SPI_FAILED,
-    };
-
-    struct Error
-    {
-        StdError   code   = StdError::OK;
-        Detail     detail = Detail::NONE;
-        SPI::Error spi {};
-        esp_err_t  native = ESP_OK;
-
-        constexpr bool ok() const noexcept {
-            return code == StdError::OK && detail == Detail::NONE && spi.ok() && native == ESP_OK;
-        }
-
-        constexpr explicit operator bool() const noexcept {
-            return ok();
-        }
+        DMA_ALLOCATE_FAILED,
+        SPI_TRANSFER_FAILED,
     };
 
 public:
@@ -134,46 +119,79 @@ public:
     ST7735(const ST7735&)            = delete;
     ST7735& operator=(const ST7735&) = delete;
 
-    [[nodiscard]] Error setup();
-    [[nodiscard]] Error setOrientation(Orientation orientation);
-    void                releaseDmaBuffer();
-    [[nodiscard]] Error allocateDmaBuffer(size_t bytes);
-    [[nodiscard]] Error setDmaBuffer(uint8_t* buffer, size_t bytes);
-    [[nodiscard]] Error setBacklight(bool enabled);
-    [[nodiscard]] Error fillScreen(uint16_t color);
-    [[nodiscard]] Error fillRect(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color);
-    [[nodiscard]] Error drawPixel(uint16_t x, uint16_t y, uint16_t color);
-    [[nodiscard]] Error drawChar(char value, uint16_t x, uint16_t y, uint16_t color);
-    [[nodiscard]] Error drawChar(char value, const TextStyle& style);
-    [[nodiscard]] Error drawText(const char* text, uint16_t x, uint16_t y, uint16_t color);
-    [[nodiscard]] Error drawText(const char* text, const TextStyle& style);
-    [[nodiscard]] Error drawFrameBuffer(const FrameBuffer& frame, uint16_t x = 0, uint16_t y = 0, uint8_t* dmaBuffer = nullptr, size_t dmaBufferBytes = 0);
-    [[nodiscard]] Error pushPixels565(uint16_t x, uint16_t y, uint16_t width, uint16_t height, const uint8_t* rgb565Be);
-    [[nodiscard]] Error beginWriteRegion(uint16_t x, uint16_t y, uint16_t width, uint16_t height);
-    [[nodiscard]] Error writePixels565(const uint8_t* rgb565Be, size_t length);
-    [[nodiscard]] Error writeColor(uint16_t color, size_t pixels);
-    [[nodiscard]] Error drawFrame565(uint16_t       x,
-                                     uint16_t       y,
-                                     uint16_t       width,
-                                     uint16_t       height,
-                                     const uint8_t* rgb565Be,
-                                     uint8_t*       dmaBuffer,
-                                     size_t         dmaBufferBytes);
-    [[nodiscard]] Error drawAnimationFrame(const AnimationView& animation,
-                                           uint16_t             frameIndex,
-                                           uint16_t             x,
-                                           uint16_t             y,
-                                           uint8_t*             dmaBuffer,
-                                           size_t               dmaBufferBytes);
-    [[nodiscard]] Error drawAnimationFrameLocked(const AnimationView& animation,
-                                                 AnimationPlayer&     player,
-                                                 uint16_t             x,
-                                                 uint16_t             y,
-                                                 uint8_t*             dmaBuffer,
-                                                 size_t               dmaBufferBytes);
+    /**
+     * @brief 初始化显示器。Initialize the display controller.
+     *
+     * SPI/GPIO 原生失败会自动保留在 cause chain 中，因此调用者只处理
+     * ST7735 语义，日志仍可看到底层 SPI 与 `esp_err_t`。
+     *
+     * @code
+     * const auto result = lcd.setup();
+     * if (result.is_err()) {
+     *     const auto& error = result.error();
+     *     // error.name(), error.message(), error.for_each_cause(...)
+     * }
+     * @endcode
+     */
+    using SetupResult = Result<void, ErrorSet<Detail::ALREADY_STARTED, Detail::INVALID_CONFIG, Detail::INVALID_BUFFER, Detail::INVALID_WINDOW, Detail::DMA_ALLOCATE_FAILED, TraceErrorSet<error_trace_depth::CHASE_IT_DOWN, Detail::GPIO_CONFIG_FAILED>, TraceErrorSet<error_trace_depth::CHASE_IT_DOWN, Detail::GPIO_WRITE_FAILED>, TraceErrorSet<error_trace_depth::CHASE_IT_DOWN, Detail::RESET_FAILED>, TraceErrorSet<error_trace_depth::CHASE_IT_DOWN, Detail::SPI_TRANSFER_FAILED>>>;
+
+    /**
+     * @brief 屏幕绘制和流式区域写入共用的结果类型。
+     * Result shared by drawing and streaming-region operations.
+     *
+     * `beginWriteRegion()` 后只能写入该区域对应数量的 RGB565 字节；未打开
+     * 区域返回 `REGION_NOT_OPEN`，写多了返回 `REGION_OVERFLOW`。
+     */
+    using DrawResult = Result<void, ErrorSet<Detail::NOT_STARTED, Detail::INVALID_WINDOW, Detail::INVALID_BUFFER, Detail::INVALID_TEXT_STYLE, Detail::REGION_NOT_OPEN, Detail::REGION_OVERFLOW, Detail::DMA_ALLOCATE_FAILED, TraceErrorSet<error_trace_depth::CHASE_IT_DOWN, Detail::GPIO_WRITE_FAILED>, TraceErrorSet<error_trace_depth::CHASE_IT_DOWN, Detail::SPI_TRANSFER_FAILED>>>;
+
+    /** DMA 缓冲区的本地管理结果，不涉及显示器传输。 */
+    using BufferResult = Result<void, ErrorSet<Detail::INVALID_BUFFER, Detail::DMA_ALLOCATE_FAILED>>;
+
+    /** 不直接绘制像素的显示器控制操作。 */
+    using ControlResult = Result<void, ErrorSet<Detail::INVALID_BUFFER, Detail::INVALID_WINDOW, TraceErrorSet<error_trace_depth::CHASE_IT_DOWN, Detail::GPIO_WRITE_FAILED>, TraceErrorSet<error_trace_depth::CHASE_IT_DOWN, Detail::SPI_TRANSFER_FAILED>>>;
+
+    /** 纯内存 framebuffer 操作的错误，不会包含硬件 cause。 */
+    using FrameResult = Result<void, ErrorSet<Detail::INVALID_BUFFER, Detail::INVALID_WINDOW, Detail::INVALID_TEXT_STYLE>>;
+
+    [[nodiscard]] SetupResult   setup();
+    [[nodiscard]] ControlResult setOrientation(Orientation orientation);
+    void                        releaseDmaBuffer();
+    [[nodiscard]] BufferResult  allocateDmaBuffer(size_t bytes);
+    [[nodiscard]] BufferResult  setDmaBuffer(uint8_t* buffer, size_t bytes);
+    [[nodiscard]] ControlResult setBacklight(bool enabled);
+    [[nodiscard]] DrawResult    fillScreen(uint16_t color);
+    [[nodiscard]] DrawResult    fillRect(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color);
+    [[nodiscard]] DrawResult    drawPixel(uint16_t x, uint16_t y, uint16_t color);
+    [[nodiscard]] DrawResult    drawChar(char value, uint16_t x, uint16_t y, uint16_t color);
+    [[nodiscard]] DrawResult    drawChar(char value, const TextStyle& style);
+    [[nodiscard]] DrawResult    drawText(const char* text, uint16_t x, uint16_t y, uint16_t color);
+    [[nodiscard]] DrawResult    drawText(const char* text, const TextStyle& style);
+    [[nodiscard]] DrawResult    drawFrameBuffer(const FrameBuffer& frame, uint16_t x = 0, uint16_t y = 0, uint8_t* dmaBuffer = nullptr, size_t dmaBufferBytes = 0);
+    [[nodiscard]] DrawResult    pushPixels565(uint16_t x, uint16_t y, uint16_t width, uint16_t height, const uint8_t* rgb565Be);
+    [[nodiscard]] DrawResult    beginWriteRegion(uint16_t x, uint16_t y, uint16_t width, uint16_t height);
+    [[nodiscard]] DrawResult    writePixels565(const uint8_t* rgb565Be, size_t length);
+    [[nodiscard]] DrawResult    writeColor(uint16_t color, size_t pixels);
+    [[nodiscard]] DrawResult    drawFrame565(uint16_t       x,
+                                             uint16_t       y,
+                                             uint16_t       width,
+                                             uint16_t       height,
+                                             const uint8_t* rgb565Be,
+                                             uint8_t*       dmaBuffer,
+                                             size_t         dmaBufferBytes);
+    [[nodiscard]] DrawResult    drawAnimationFrame(const AnimationView& animation,
+                                                   uint16_t             frameIndex,
+                                                   uint16_t             x,
+                                                   uint16_t             y,
+                                                   uint8_t*             dmaBuffer,
+                                                   size_t               dmaBufferBytes);
+    [[nodiscard]] DrawResult    drawAnimationFrameLocked(const AnimationView& animation,
+                                                         AnimationPlayer&     player,
+                                                         uint16_t             x,
+                                                         uint16_t             y,
+                                                         uint8_t*             dmaBuffer,
+                                                         size_t               dmaBufferBytes);
 
     [[nodiscard]] bool     started() const;
-    [[nodiscard]] Error    lastError() const;
     [[nodiscard]] uint16_t width() const;
     [[nodiscard]] uint16_t height() const;
     [[nodiscard]] bool     dmaReady() const;
@@ -183,17 +201,16 @@ public:
         return static_cast<uint16_t>(((r & 0xF8U) << 8U) | ((g & 0xFCU) << 3U) | (b >> 3U));
     }
 
-    static bool        clearFrame(FrameBuffer& frame, uint16_t color);
-    static bool        copyFrame(FrameBuffer& frame, const uint8_t* rgb565Be, uint16_t width, uint16_t height, size_t stride);
-    static bool        copyAnimationFrame(FrameBuffer& frame, const AnimationView& animation, uint16_t frameIndex);
-    static bool        fillFrameRect(FrameBuffer& frame, uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color);
-    static bool        drawFrameChar(FrameBuffer& frame, char value, const TextStyle& style);
-    static bool        drawFrameText(FrameBuffer& frame, const char* text, const TextStyle& style);
-    static Config      makeConfig(Orientation orientation);
-    static void        applyOrientation(Config& config, Orientation orientation);
-    static TextBounds  measureText(const char* text, uint8_t scale = 1);
-    static const char* detailName(Detail detail) noexcept;
-    static const char* orientationName(Orientation orientation) noexcept;
+    [[nodiscard]] static FrameResult clearFrame(FrameBuffer& frame, uint16_t color);
+    [[nodiscard]] static FrameResult copyFrame(FrameBuffer& frame, const uint8_t* rgb565Be, uint16_t width, uint16_t height, size_t stride);
+    [[nodiscard]] static FrameResult copyAnimationFrame(FrameBuffer& frame, const AnimationView& animation, uint16_t frameIndex);
+    [[nodiscard]] static FrameResult fillFrameRect(FrameBuffer& frame, uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color);
+    [[nodiscard]] static FrameResult drawFrameChar(FrameBuffer& frame, char value, const TextStyle& style);
+    [[nodiscard]] static FrameResult drawFrameText(FrameBuffer& frame, const char* text, const TextStyle& style);
+    static Config                    makeConfig(Orientation orientation);
+    static void                      applyOrientation(Config& config, Orientation orientation);
+    static TextBounds                measureText(const char* text, uint8_t scale = 1);
+    static const char*               orientationName(Orientation orientation) noexcept;
 
 private:
     static constexpr uint8_t  CmdSwReset = 0x01;
@@ -219,35 +236,35 @@ private:
     SPI&     m_spi;
     size_t   m_deviceIndex = 0;
     Config   m_config {};
-    bool     m_started = false;
-    Error    m_lastError {};
-    bool     m_regionOpen    = false;
-    uint8_t* m_dmaBuffer     = nullptr;
-    size_t   m_dmaBufferSize = 0;
-    bool     m_ownsDmaBuffer = false;
+    bool     m_started              = false;
+    size_t   m_regionBytesRemaining = 0;
+    uint8_t* m_dmaBuffer            = nullptr;
+    size_t   m_dmaBufferSize        = 0;
+    bool     m_ownsDmaBuffer        = false;
 
 private:
-    [[nodiscard]] Error configurePins();
-    [[nodiscard]] Error hardwareReset();
-    [[nodiscard]] Error writeCommand(uint8_t command);
-    [[nodiscard]] Error writeData(const uint8_t* data, size_t length);
-    [[nodiscard]] Error writeCommandData(uint8_t command, const uint8_t* data, size_t length);
-    [[nodiscard]] Error setAddressWindow(uint16_t x, uint16_t y, uint16_t width, uint16_t height);
-    [[nodiscard]] Error writeRepeatedColor(uint16_t color, size_t pixels);
-    [[nodiscard]] Error drawGlyphSolid(char value, uint16_t x, uint16_t y, const TextStyle& style);
-    [[nodiscard]] Error drawGlyphTransparent(char value, uint16_t x, uint16_t y, const TextStyle& style);
-    [[nodiscard]] Error fillGlyphRows(char             value,
-                                      uint16_t         x,
-                                      uint16_t         y,
-                                      uint16_t         visibleWidth,
-                                      uint16_t         rowOffset,
-                                      uint16_t         rows,
-                                      const TextStyle& style,
-                                      uint8_t*         out);
+    using PinResult   = Result<void, ErrorSet<TraceErrorSet<error_trace_depth::CHASE_IT_DOWN, Detail::GPIO_CONFIG_FAILED>>>;
+    using ResetResult = Result<void, ErrorSet<TraceErrorSet<error_trace_depth::CHASE_IT_DOWN, Detail::RESET_FAILED>>>;
+    using IoResult    = Result<void, ErrorSet<Detail::INVALID_BUFFER, Detail::INVALID_WINDOW, TraceErrorSet<error_trace_depth::CHASE_IT_DOWN, Detail::GPIO_WRITE_FAILED>, TraceErrorSet<error_trace_depth::CHASE_IT_DOWN, Detail::SPI_TRANSFER_FAILED>>>;
 
-    [[nodiscard]] Error                 makeError(StdError code, Detail detail, esp_err_t native = ESP_OK, SPI::Error spi = {});
-    [[nodiscard]] Error                 mapSpiError(SPI::Error spi, Detail detail);
-    [[nodiscard]] Error                 clearError();
+    [[nodiscard]] PinResult   configurePins();
+    [[nodiscard]] ResetResult hardwareReset();
+    [[nodiscard]] IoResult    writeCommand(uint8_t command);
+    [[nodiscard]] IoResult    writeData(const uint8_t* data, size_t length);
+    [[nodiscard]] IoResult    writeCommandData(uint8_t command, const uint8_t* data, size_t length);
+    [[nodiscard]] IoResult    setAddressWindow(uint16_t x, uint16_t y, uint16_t width, uint16_t height);
+    [[nodiscard]] DrawResult  writeRepeatedColor(uint16_t color, size_t pixels);
+    [[nodiscard]] DrawResult  drawGlyphSolid(char value, uint16_t x, uint16_t y, const TextStyle& style);
+    [[nodiscard]] DrawResult  drawGlyphTransparent(char value, uint16_t x, uint16_t y, const TextStyle& style);
+    [[nodiscard]] DrawResult  fillGlyphRows(char             value,
+                                            uint16_t         x,
+                                            uint16_t         y,
+                                            uint16_t         visibleWidth,
+                                            uint16_t         rowOffset,
+                                            uint16_t         rows,
+                                            const TextStyle& style,
+                                            uint8_t*         out);
+
     [[nodiscard]] bool                  validWindow(uint16_t x, uint16_t y, uint16_t width, uint16_t height) const;
     [[nodiscard]] bool                  validTextStyle(const TextStyle& style) const;
     [[nodiscard]] uint8_t*              dmaBufferOr(uint8_t* buffer) const;

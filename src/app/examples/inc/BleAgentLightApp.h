@@ -1,13 +1,15 @@
 #pragma once
 
-#include "freertos/idf_additions.h"
-#include "freertos/projdefs.h"
 #include "src/cfg/AppConfig.h"
 #include "src/dom/NodeInfo.h"
 #include "src/dvc/inc/Button.h"
+#include "src/dvc/inc/ST7735.h"
 #include "src/dvc/inc/Serial.h"
-#include "src/svc/inc/SerialConsoleService.h"
+#include "src/fw/inc/spi.h"
+#include "src/svc/inc/BleAgentLight/AgentRegistry.h"
 #include "src/svc/inc/BleAgentLight/BleAgentLight.h"
+#include "src/svc/inc/BleAgentLight/DisplayService.h"
+#include "src/svc/inc/SerialConsoleService.h"
 
 #include <Arduino.h>
 #include "freertos/FreeRTOS.h"
@@ -24,14 +26,68 @@ namespace BleAgentLightApp
         enum class PinId : uint8_t
         {
             Button1,
+            LcdReset,
+            LcdSck,
+            LcdMosi,
+            LcdCs,
+            LcdDc,
+            LcdBacklight,
         };
 
         inline constexpr auto Pins = ::prtn::pin::layout(
-            ::prtn::pin::bind(PinId::Button1, GPIO_NUM_9, ::prtn::pin::Role::InputPullup));
+            ::prtn::pin::bind(PinId::Button1, GPIO_NUM_9, ::prtn::pin::Role::InputPullup),
+            ::prtn::pin::bind(PinId::LcdReset, GPIO_NUM_1, ::prtn::pin::Role::Output),
+            ::prtn::pin::bind(PinId::LcdSck, GPIO_NUM_36, ::prtn::pin::Role::SpiSck),
+            ::prtn::pin::bind(PinId::LcdMosi, GPIO_NUM_37, ::prtn::pin::Role::SpiMosi),
+            ::prtn::pin::bind(PinId::LcdCs, GPIO_NUM_35, ::prtn::pin::Role::SpiCs),
+            ::prtn::pin::bind(PinId::LcdDc, GPIO_NUM_0, ::prtn::pin::Role::Output),
+            ::prtn::pin::bind(PinId::LcdBacklight, GPIO_NUM_10, ::prtn::pin::Role::Output));
+
+        constexpr uint32_t SpiClockHz     = 20 * 1000 * 1000;
+        constexpr size_t   DeviceIndex    = 0;
+        constexpr size_t   DmaBufferBytes = 3200;
 
         constexpr TickType_t  TaskPeriodTicks = pdMS_TO_TICKS(AppConfig::Runtime::AppLoopIntervalMs);
         constexpr uint32_t    TaskStackWords  = AppConfig::Runtime::EspNowTaskStackWords;
         constexpr UBaseType_t TaskPriority    = AppConfig::Runtime::EspNowTaskPriority;
+
+        inline SPI::BusConfig makeBusConfig() {
+            SPI::BusConfig config {};
+            config.host                = SPI2_HOST;
+            config.bus.mosi_io_num     = Pins[PinId::LcdMosi];
+            config.bus.miso_io_num     = -1;
+            config.bus.sclk_io_num     = Pins[PinId::LcdSck];
+            config.bus.quadwp_io_num   = -1;
+            config.bus.quadhd_io_num   = -1;
+            config.bus.max_transfer_sz = DmaBufferBytes;
+            config.bus.flags           = SPICOMMON_BUSFLAG_MASTER;
+            config.bus.intr_flags      = 0;
+            return config;
+        }
+
+        inline SPI::DeviceConfig makeDeviceConfig() {
+            SPI::DeviceConfig config {};
+            config.index                 = DeviceIndex;
+            config.device.clock_speed_hz = SpiClockHz;
+            config.device.mode           = 0;
+            config.device.spics_io_num   = Pins[PinId::LcdCs];
+            config.device.queue_size     = 4;
+            return config;
+        }
+
+        inline ST7735::Config makeLcdConfig() {
+            ST7735::Config config       = ST7735::makeConfig(ST7735::Orientation::Portrait);
+            config.dmaBufferBytes       = DmaBufferBytes;
+            config.resetPin             = Pins[PinId::LcdReset];
+            config.dcPin                = Pins[PinId::LcdDc];
+            config.backlightPin         = Pins[PinId::LcdBacklight];
+            config.useResetPin          = true;
+            config.useBacklightPin      = true;
+            config.autoDmaBuffer        = true;
+            config.useOrientationPreset = true;
+            config.invertColors         = true;
+            return config;
+        }
 
         struct Context
         {
@@ -45,13 +101,15 @@ namespace BleAgentLightApp
                 BOOTING,
             };
 
-            BleAgentLightService::Config bleConfig;
-            BleAgentLightService         bleService {bleConfig};
-
             dvc::Serial          serial {AppConfig::Hardware::SerialBaudrate};
             SerialConsoleService console {serial};
 
-            Button button1 {Pins[PinId::Button1], LOW, INPUT_PULLUP, 50};
+            ble_agent_light::AgentRegistry  registry;
+            SPI                             spi {makeBusConfig()};
+            ST7735                          lcd {spi, DeviceIndex, makeLcdConfig()};
+            ble_agent_light::DisplayService display {lcd, registry};
+            BleAgentLightService::Config    bleConfig;
+            BleAgentLightService            bleService {registry, bleConfig};
 
             TaskHandle_t taskHandle = nullptr;
         };
@@ -60,40 +118,65 @@ namespace BleAgentLightApp
             static Context app;
             return app;
         }
+
+        template <size_t Depth, auto... Errors>
+        inline void logError(Context& app, const char* operation, const TracedErrorSet<Depth, Errors...>& error) {
+            app.console.error("%s failed: %s::%s (%ld)%s%s",
+                              operation,
+                              error.domain(),
+                              error.name(),
+                              static_cast<long>(error.numeric_code()),
+                              error.has_message() ? ": " : "",
+                              error.message());
+            error.for_each_cause([&app](const ErrorFrame& cause) {
+                app.console.error("  caused by %s::%s (%ld)%s%s",
+                                  cause.domain,
+                                  cause.name,
+                                  static_cast<long>(cause.numericCode),
+                                  cause.message != nullptr ? ": " : "",
+                                  cause.message != nullptr ? cause.message : "");
+            });
+        }
+
         inline void taskEntry(void*) {
-            Context&   app              = context();
-            TickType_t taskLastWakeTime = xTaskGetTickCount();
+            Context& app = context();
 
             for (;;) {
                 app.console.updateCommandResponse();
-                app.button1.update();
                 app.bleService.poll(millis());
-                vTaskDelayUntil(&taskLastWakeTime, TaskPeriodTicks);
+
+                const auto displayError = app.display.takeLastError();
+                if (displayError.has_value()) {
+                    logError(app, "Agent display update", *displayError);
+                    app.nodeInfo.updateNodeState(ERROR);
+                }
+
+                vTaskDelay(TaskPeriodTicks);
             }
         }
 
         inline bool startTask() {
             Context& app = context();
-            if (app.taskHandle != nullptr) {
+            if (app.taskHandle != nullptr)
                 return true;
-            }
 
-            const BaseType_t ok = xTaskCreate(
+            const BaseType_t result = xTaskCreatePinnedToCore(
                 taskEntry,
-                "button test",
+                "agent panel",
                 TaskStackWords,
                 nullptr,
                 TaskPriority,
-                &app.taskHandle);
+                &app.taskHandle,
+                1);
 
-            if (ok != pdPASS) {
+            if (result != pdPASS) {
                 app.taskHandle = nullptr;
                 app.nodeInfo.updateNodeState(ERROR);
-                app.console.error("failed to createa button test task");
+                app.console.error("failed to create Agent Panel task");
                 return false;
             }
 
-            return false;
+            return true;
         }
     }
 
@@ -102,34 +185,65 @@ namespace BleAgentLightApp
 
         app.console.setup();
         app.console.printBootBanner(app.nodeInfo);
-        if (!app.button1.setup())
-            app.console.error("Failed to setup Button1");
-        app.button1.setCallback([](Button::Event event, Button::State, void* context) -> void {
-            if (event != Button::Event::PRESSED && context != nullptr) {
-                return;
-            }
-            auto* app = static_cast<Detail::Context*>(context);
-            app->console.log("Button1 pressed");
-        },
-                                &app);
 
-        const BleAgentLightService::SetupResult bleSetupResult = app.bleService.setup();
+        const auto spiSetupResult = app.spi.setupBus();
+        if (spiSetupResult.is_err()) {
+            app.nodeInfo.updateNodeState(ERROR);
+            Detail::logError(app, "SPI setup", spiSetupResult.error());
+            app.console.printState(app.nodeInfo.getNodeState());
+            return;
+        }
+
+        const auto deviceResult = app.spi.addDevice(Detail::makeDeviceConfig());
+        if (deviceResult.is_err()) {
+            app.nodeInfo.updateNodeState(ERROR);
+            Detail::logError(app, "ST7735 SPI device setup", deviceResult.error());
+            app.console.printState(app.nodeInfo.getNodeState());
+            return;
+        }
+
+        const auto lcdResult = app.lcd.setup();
+        if (lcdResult.is_err()) {
+            app.nodeInfo.updateNodeState(ERROR);
+            Detail::logError(app, "ST7735 setup", lcdResult.error());
+            app.console.printState(app.nodeInfo.getNodeState());
+            return;
+        }
+
+        const auto displayResult = app.display.setup();
+        if (displayResult.is_err()) {
+            app.nodeInfo.updateNodeState(ERROR);
+            Detail::logError(app, "Agent display setup", displayResult.error());
+            app.console.printState(app.nodeInfo.getNodeState());
+            return;
+        }
+
+        const auto subscriptionResult = app.registry.subscribe(app.display.eventHandlers());
+        if (subscriptionResult.is_err()) {
+            app.nodeInfo.updateNodeState(ERROR);
+            Detail::logError(app, "Agent display subscription", subscriptionResult.error());
+            app.console.printState(app.nodeInfo.getNodeState());
+            return;
+        }
+
+        const auto bleSetupResult = app.bleService.setup();
         if (bleSetupResult.is_err()) {
             app.nodeInfo.updateNodeState(ERROR);
-            app.console.error("Failed to setup BLE Agent Light service");
+            Detail::logError(app, "BLE Agent Light setup", bleSetupResult.error());
+            app.console.printState(app.nodeInfo.getNodeState());
+            return;
+        }
+
+        if (!Detail::startTask()) {
             app.console.printState(app.nodeInfo.getNodeState());
             return;
         }
 
         app.nodeInfo.updateNodeState(RUNNING);
         app.console.printState(app.nodeInfo.getNodeState());
-
-        Detail::startTask();
     }
 
     inline void idle() {
-        Detail::context().console.updateCommandResponse();
-
         delay(AppConfig::Runtime::AppLoopIntervalMs);
     }
 }
