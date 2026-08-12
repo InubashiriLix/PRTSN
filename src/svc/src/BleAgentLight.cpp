@@ -1,9 +1,12 @@
 #include "src/svc/inc/BleAgentLight/BleAgentLight.h"
+#include "src/svc/inc/SerialConsoleService.h"
 
 #include <Arduino.h>
 #include <BLEAdvertising.h>
 #include <BLEDevice.h>
 #include <BLESecurity.h>
+
+#include <cstdarg>
 
 namespace ble_agent_light
 {
@@ -71,7 +74,7 @@ namespace ble_agent_light
     BleGattTransport::SendResult BleGattTransport::send(const uint8_t* data, std::size_t size) {
         if (!m_isSetup || m_eventTx == nullptr)
             return Err<SendErrorCode::NotInitialized>();
-        if (!m_connected)
+        if (!m_connected.load(std::memory_order_relaxed))
             return Err<SendErrorCode::NotConnected>();
 
         m_eventTx->setValue(data, size);
@@ -92,13 +95,13 @@ namespace ble_agent_light
     }
 
     void BleGattTransport::handleConnected() {
-        m_connected = true;
+        m_connected.store(true, std::memory_order_relaxed);
         if (m_callbacks.onConnected != nullptr)
             m_callbacks.onConnected(m_callbacks.context);
     }
 
     void BleGattTransport::handleDisconnected() {
-        m_connected = false;
+        m_connected.store(false, std::memory_order_relaxed);
         if (m_callbacks.onDisconnected != nullptr)
             m_callbacks.onDisconnected(m_callbacks.context);
     }
@@ -132,11 +135,23 @@ BleAgentLightService::BleAgentLightService(
           makeTransportCallbacks(this)) {}
 
 BleAgentLightService::SetupResult BleAgentLightService::setup() {
-    return m_transport.setup();
+    const SetupResult result = m_transport.setup();
+    if (result.is_err()) {
+        if (m_config.console != nullptr)
+            m_config.console->errorResult("BLE Agent Light setup", result.error());
+        return result;
+    }
+
+    logInfo("[BLE] advertising started: device=%s", m_config.deviceName);
+    return Ok();
 }
 
 void BleAgentLightService::poll(uint32_t nowMs) {
     m_registry.reap(nowMs);
+}
+
+bool BleAgentLightService::connected() const noexcept {
+    return m_transport.connected();
 }
 
 ble_agent_light::BleGattTransport::Callbacks BleAgentLightService::makeTransportCallbacks(
@@ -149,7 +164,9 @@ ble_agent_light::BleGattTransport::Callbacks BleAgentLightService::makeTransport
     };
 }
 
-void BleAgentLightService::onConnected(void*) {}
+void BleAgentLightService::onConnected(void* context) {
+    static_cast<BleAgentLightService*>(context)->handleConnected();
+}
 
 void BleAgentLightService::onDisconnected(void* context) {
     static_cast<BleAgentLightService*>(context)->handleDisconnected();
@@ -159,7 +176,12 @@ void BleAgentLightService::onWrite(void* context, const uint8_t* data, std::size
     static_cast<BleAgentLightService*>(context)->handleWrite(data, size);
 }
 
+void BleAgentLightService::handleConnected() {
+    logInfo("[BLE] client connected");
+}
+
 void BleAgentLightService::handleDisconnected() {
+    logInfo("[BLE] client disconnected; Agent leases started");
     m_registry.beginLease(millis());
 }
 
@@ -167,6 +189,11 @@ void BleAgentLightService::handleWrite(const uint8_t* data, std::size_t size) {
     const uint8_t hintedOpcode = size == 0 || data == nullptr ? 0 : data[0];
     const auto    parsed       = ble_agent_light::protocol::decode(data, size);
     if (parsed.is_err()) {
+        logWarn("[BLE] rejected command: opcode=0x%02X size=%u error=%s::%s",
+                hintedOpcode,
+                static_cast<unsigned>(size),
+                parsed.error().domain(),
+                parsed.error().name());
         sendStatus(hintedOpcode, parsed.error().code());
         return;
     }
@@ -181,8 +208,12 @@ void BleAgentLightService::handleWrite(const uint8_t* data, std::size_t size) {
                 command.size);
             if (result.is_ok())
                 sendStatus(opcode, Status::Ok, result.value());
-            else
+            else {
+                logWarn("[BLE] registration rejected: error=%s::%s",
+                        result.error().domain(),
+                        result.error().name());
                 sendStatus(opcode, result.error().code());
+            }
             return;
         }
 
@@ -207,13 +238,37 @@ void BleAgentLightService::respondMutation(
     uint8_t               opcode,
     uint8_t               id,
     const MutationResult& result) {
-    sendStatus(
-        opcode,
-        result.is_ok() ? Status::Ok : result.error().code(),
-        id);
+    if (result.is_err()) {
+        logWarn("[BLE] Agent mutation rejected: opcode=0x%02X id=%u error=%s::%s",
+                opcode,
+                id,
+                result.error().domain(),
+                result.error().name());
+    }
+    sendStatus(opcode, result.is_ok() ? Status::Ok : result.error().code(), id);
 }
 
 void BleAgentLightService::sendStatus(uint8_t opcode, Status status, uint8_t id) {
     const auto frame = ble_agent_light::protocol::resultFrame(opcode, status, id);
     (void)m_transport.send(frame.data(), frame.size());
+}
+
+void BleAgentLightService::logInfo(const char* format, ...) const {
+    if (m_config.console == nullptr)
+        return;
+
+    va_list args;
+    va_start(args, format);
+    m_config.console->vinfo(format, args);
+    va_end(args);
+}
+
+void BleAgentLightService::logWarn(const char* format, ...) const {
+    if (m_config.console == nullptr)
+        return;
+
+    va_list args;
+    va_start(args, format);
+    m_config.console->vwarn(format, args);
+    va_end(args);
 }

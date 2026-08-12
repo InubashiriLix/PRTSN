@@ -145,10 +145,14 @@ namespace prtn::s3
 
     namespace spi
     {
-        inline constexpr gpio_num_t sck  = GPIO_NUM_36;
-        inline constexpr gpio_num_t mosi = GPIO_NUM_37;
-        inline constexpr gpio_num_t miso = GPIO_NUM_38;
-        inline constexpr gpio_num_t cs   = GPIO_NUM_35;
+        // GPIO35..37 are occupied by the octal PSRAM fitted to the N16R8
+        // module. Driving them can corrupt external-memory/cache traffic and
+        // end in an interrupt-watchdog reset, so the board SPI defaults use
+        // ordinary GPIOs instead.
+        inline constexpr gpio_num_t sck  = GPIO_NUM_11;
+        inline constexpr gpio_num_t mosi = GPIO_NUM_12;
+        inline constexpr gpio_num_t miso = GPIO_NUM_14;
+        inline constexpr gpio_num_t cs   = GPIO_NUM_13;
     }
 
     namespace i2c0
@@ -179,5 +183,14 @@ namespace prtn::s3
         inline constexpr gpio_num_t data = GPIO_NUM_48;
     }
 
-    inline constexpr std::array<gpio_num_t, 0> ReservedPins {};
+    /**
+     * GPIO35..37 carry the upper octal PSRAM signals on this N16R8 module.
+     * Keep them in PinDefs so diagnostics can identify the physical GPIO, but
+     * reject application layouts at compile time.
+     */
+    inline constexpr std::array ReservedPins {
+        GPIO_NUM_35,
+        GPIO_NUM_36,
+        GPIO_NUM_37,
+    };
 }

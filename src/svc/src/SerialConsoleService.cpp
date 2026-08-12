@@ -129,6 +129,22 @@ void SerialConsoleService::err(const char* format, ...) {
     va_end(args);
 }
 
+void SerialConsoleService::vinfo(const char* format, va_list args) {
+    vlog(OutputLevel::INFO, "info", format, args);
+}
+
+void SerialConsoleService::vdebug(const char* format, va_list args) {
+    vlog(OutputLevel::DEBUG, "debug", format, args);
+}
+
+void SerialConsoleService::vwarn(const char* format, va_list args) {
+    vlog(OutputLevel::WARN, "warn", format, args);
+}
+
+void SerialConsoleService::verror(const char* format, va_list args) {
+    vlog(OutputLevel::ERROR, "error", format, args);
+}
+
 void SerialConsoleService::hexDump(const char* prefix, const uint8_t* data, size_t len) {
     if (prefix == nullptr || data == nullptr || !setPrintLevel(OutputLevel::INFO) || !lock()) {
         return;

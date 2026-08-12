@@ -7,6 +7,8 @@
 #include <cstddef>
 #include <cstdint>
 
+class SerialConsoleService;
+
 class BleAgentLightService
 {
 public:
@@ -29,6 +31,8 @@ public:
         const char* infoUuid    = ble_agent_light::protocol::DefaultInfoUuid;
         const char* commandUuid = ble_agent_light::protocol::DefaultCommandUuid;
         const char* eventUuid   = ble_agent_light::protocol::DefaultEventUuid;
+        /** Optional, non-owning diagnostic output. It must outlive this service. */
+        SerialConsoleService* console = nullptr;
     };
 
     using SetupErrorCode = ble_agent_light::BleGattTransport::SetupErrorCode;
@@ -43,7 +47,9 @@ public:
     BleAgentLightService& operator=(BleAgentLightService&&)      = delete;
 
     [[nodiscard]] SetupResult setup();
-    void                      poll(uint32_t nowMs);
+    /** 跨核心读取当前 BLE 连接状态。Thread-safe BLE connection-state query. */
+    [[nodiscard]] bool connected() const noexcept;
+    void               poll(uint32_t nowMs);
 
 private:
     using MutationResult = ble_agent_light::AgentRegistry::MutationResult;
@@ -53,10 +59,13 @@ private:
     static void                                         onDisconnected(void* context);
     static void                                         onWrite(void* context, const uint8_t* data, std::size_t size);
 
+    void handleConnected();
     void handleDisconnected();
     void handleWrite(const uint8_t* data, std::size_t size);
     void respondMutation(uint8_t opcode, uint8_t id, const MutationResult& result);
     void sendStatus(uint8_t opcode, Status status, uint8_t id = NoAgent);
+    void logInfo(const char* format, ...) const __attribute__((format(printf, 2, 3)));
+    void logWarn(const char* format, ...) const __attribute__((format(printf, 2, 3)));
 
     Config                            m_config;
     ble_agent_light::AgentRegistry&   m_registry;

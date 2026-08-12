@@ -5,6 +5,7 @@
 #include <BLECharacteristic.h>
 #include <BLEServer.h>
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 
@@ -76,6 +77,16 @@ namespace ble_agent_light
         [[nodiscard]] SetupResult setup();
         [[nodiscard]] SendResult  send(const uint8_t* data, std::size_t size);
 
+        /**
+         * @brief 当前是否有 BLE central 连接。Whether a BLE central is connected.
+         *
+         * 可安全地从其他 FreeRTOS 核心读取；连接回调只更新这个原子状态，
+         * 不应在 BLE callback 中直接操作 LED、SPI 或其他可能阻塞的硬件。
+         */
+        [[nodiscard]] bool connected() const noexcept {
+            return m_connected.load(std::memory_order_relaxed);
+        }
+
     private:
         class CallbackAdapter final : public BLEServerCallbacks, public BLECharacteristicCallbacks
         {
@@ -98,9 +109,9 @@ namespace ble_agent_light
         Config             m_config;
         Callbacks          m_callbacks;
         CallbackAdapter    m_adapter;
-        BLEServer*         m_server    = nullptr;
-        BLECharacteristic* m_eventTx   = nullptr;
-        bool               m_isSetup   = false;
-        bool               m_connected = false;
+        BLEServer*         m_server  = nullptr;
+        BLECharacteristic* m_eventTx = nullptr;
+        bool               m_isSetup = false;
+        std::atomic<bool>  m_connected {false};
     };
 }

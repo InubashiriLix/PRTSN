@@ -9,11 +9,14 @@
 #include "src/svc/inc/BleAgentLight/AgentRegistry.h"
 #include "src/svc/inc/BleAgentLight/BleAgentLight.h"
 #include "src/svc/inc/BleAgentLight/DisplayService.h"
+#include "src/svc/inc/BleAgentLight/Ws2812Service.h"
 #include "src/svc/inc/SerialConsoleService.h"
 
 #include <Arduino.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+
+#include <optional>
 
 #ifdef Serial
 #undef Serial
@@ -32,16 +35,18 @@ namespace BleAgentLightApp
             LcdCs,
             LcdDc,
             LcdBacklight,
+            AgentLeds,
         };
 
         inline constexpr auto Pins = ::prtn::pin::layout(
             ::prtn::pin::bind(PinId::Button1, GPIO_NUM_9, ::prtn::pin::Role::InputPullup),
             ::prtn::pin::bind(PinId::LcdReset, GPIO_NUM_1, ::prtn::pin::Role::Output),
-            ::prtn::pin::bind(PinId::LcdSck, GPIO_NUM_36, ::prtn::pin::Role::SpiSck),
-            ::prtn::pin::bind(PinId::LcdMosi, GPIO_NUM_37, ::prtn::pin::Role::SpiMosi),
-            ::prtn::pin::bind(PinId::LcdCs, GPIO_NUM_35, ::prtn::pin::Role::SpiCs),
+            ::prtn::pin::bind(PinId::LcdSck, ::prtn::b::spi::sck, ::prtn::pin::Role::SpiSck),
+            ::prtn::pin::bind(PinId::LcdMosi, ::prtn::b::spi::mosi, ::prtn::pin::Role::SpiMosi),
+            ::prtn::pin::bind(PinId::LcdCs, ::prtn::b::spi::cs, ::prtn::pin::Role::SpiCs),
             ::prtn::pin::bind(PinId::LcdDc, GPIO_NUM_0, ::prtn::pin::Role::Output),
-            ::prtn::pin::bind(PinId::LcdBacklight, GPIO_NUM_10, ::prtn::pin::Role::Output));
+            ::prtn::pin::bind(PinId::LcdBacklight, GPIO_NUM_10, ::prtn::pin::Role::Output),
+            ::prtn::pin::bind(PinId::AgentLeds, GPIO_NUM_48, ::prtn::pin::Role::RmtTx));
 
         constexpr uint32_t SpiClockHz     = 20 * 1000 * 1000;
         constexpr size_t   DeviceIndex    = 0;
@@ -89,6 +94,13 @@ namespace BleAgentLightApp
             return config;
         }
 
+        inline ble_agent_light::Ws2812Service::Config makeLedConfig() {
+            return {
+                .ledCount = ble_agent_light::protocol::AgentCount,
+                .ledPin   = Pins[PinId::AgentLeds],
+            };
+        }
+
         struct Context
         {
             NodeInfo nodeInfo {
@@ -108,34 +120,17 @@ namespace BleAgentLightApp
             SPI                             spi {makeBusConfig()};
             ST7735                          lcd {spi, DeviceIndex, makeLcdConfig()};
             ble_agent_light::DisplayService display {lcd, registry};
-            BleAgentLightService::Config    bleConfig;
+            ble_agent_light::Ws2812Service  leds {makeLedConfig()};
+            BleAgentLightService::Config    bleConfig {.console = &console};
             BleAgentLightService            bleService {registry, bleConfig};
 
-            TaskHandle_t taskHandle = nullptr;
+            TaskHandle_t        taskHandle = nullptr;
+            std::optional<bool> displayedConnectionState;
         };
 
         inline Context& context() {
             static Context app;
             return app;
-        }
-
-        template <size_t Depth, auto... Errors>
-        inline void logError(Context& app, const char* operation, const TracedErrorSet<Depth, Errors...>& error) {
-            app.console.error("%s failed: %s::%s (%ld)%s%s",
-                              operation,
-                              error.domain(),
-                              error.name(),
-                              static_cast<long>(error.numeric_code()),
-                              error.has_message() ? ": " : "",
-                              error.message());
-            error.for_each_cause([&app](const ErrorFrame& cause) {
-                app.console.error("  caused by %s::%s (%ld)%s%s",
-                                  cause.domain,
-                                  cause.name,
-                                  static_cast<long>(cause.numericCode),
-                                  cause.message != nullptr ? ": " : "",
-                                  cause.message != nullptr ? cause.message : "");
-            });
         }
 
         inline void taskEntry(void*) {
@@ -145,9 +140,22 @@ namespace BleAgentLightApp
                 app.console.updateCommandResponse();
                 app.bleService.poll(millis());
 
+                const bool connected = app.bleService.connected();
+                if (!app.displayedConnectionState.has_value() ||
+                    *app.displayedConnectionState != connected) {
+                    app.leds.setConnected(connected);
+                    app.displayedConnectionState = connected;
+                }
+
                 const auto displayError = app.display.takeLastError();
                 if (displayError.has_value()) {
-                    logError(app, "Agent display update", *displayError);
+                    app.console.errorResult("Agent display update", *displayError);
+                    app.nodeInfo.updateNodeState(ERROR);
+                }
+
+                const auto ledError = app.leds.takeLastError();
+                if (ledError.has_value()) {
+                    app.console.errorResult("Agent LED update", *ledError);
                     app.nodeInfo.updateNodeState(ERROR);
                 }
 
@@ -189,7 +197,7 @@ namespace BleAgentLightApp
         const auto spiSetupResult = app.spi.setupBus();
         if (spiSetupResult.is_err()) {
             app.nodeInfo.updateNodeState(ERROR);
-            Detail::logError(app, "SPI setup", spiSetupResult.error());
+            app.console.errorResult("SPI setup", spiSetupResult.error());
             app.console.printState(app.nodeInfo.getNodeState());
             return;
         }
@@ -197,7 +205,7 @@ namespace BleAgentLightApp
         const auto deviceResult = app.spi.addDevice(Detail::makeDeviceConfig());
         if (deviceResult.is_err()) {
             app.nodeInfo.updateNodeState(ERROR);
-            Detail::logError(app, "ST7735 SPI device setup", deviceResult.error());
+            app.console.errorResult("ST7735 SPI device setup", deviceResult.error());
             app.console.printState(app.nodeInfo.getNodeState());
             return;
         }
@@ -205,7 +213,7 @@ namespace BleAgentLightApp
         const auto lcdResult = app.lcd.setup();
         if (lcdResult.is_err()) {
             app.nodeInfo.updateNodeState(ERROR);
-            Detail::logError(app, "ST7735 setup", lcdResult.error());
+            app.console.errorResult("ST7735 setup", lcdResult.error());
             app.console.printState(app.nodeInfo.getNodeState());
             return;
         }
@@ -213,7 +221,15 @@ namespace BleAgentLightApp
         const auto displayResult = app.display.setup();
         if (displayResult.is_err()) {
             app.nodeInfo.updateNodeState(ERROR);
-            Detail::logError(app, "Agent display setup", displayResult.error());
+            app.console.errorResult("Agent display setup", displayResult.error());
+            app.console.printState(app.nodeInfo.getNodeState());
+            return;
+        }
+
+        const auto ledSetupResult = app.leds.setup();
+        if (ledSetupResult.is_err()) {
+            app.nodeInfo.updateNodeState(ERROR);
+            app.console.errorResult("Agent LED setup", ledSetupResult.error());
             app.console.printState(app.nodeInfo.getNodeState());
             return;
         }
@@ -221,7 +237,15 @@ namespace BleAgentLightApp
         const auto subscriptionResult = app.registry.subscribe(app.display.eventHandlers());
         if (subscriptionResult.is_err()) {
             app.nodeInfo.updateNodeState(ERROR);
-            Detail::logError(app, "Agent display subscription", subscriptionResult.error());
+            app.console.errorResult("Agent display subscription", subscriptionResult.error());
+            app.console.printState(app.nodeInfo.getNodeState());
+            return;
+        }
+
+        const auto ledSubscriptionResult = app.registry.subscribe(app.leds.eventHandlers());
+        if (ledSubscriptionResult.is_err()) {
+            app.nodeInfo.updateNodeState(ERROR);
+            app.console.errorResult("Agent LED subscription", ledSubscriptionResult.error());
             app.console.printState(app.nodeInfo.getNodeState());
             return;
         }
@@ -229,7 +253,8 @@ namespace BleAgentLightApp
         const auto bleSetupResult = app.bleService.setup();
         if (bleSetupResult.is_err()) {
             app.nodeInfo.updateNodeState(ERROR);
-            Detail::logError(app, "BLE Agent Light setup", bleSetupResult.error());
+            // BleAgentLightService already logs the typed setup error when a
+            // diagnostic Console is configured.
             app.console.printState(app.nodeInfo.getNodeState());
             return;
         }

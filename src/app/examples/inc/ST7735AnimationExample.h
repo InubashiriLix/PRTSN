@@ -33,9 +33,9 @@ namespace ST7735AnimationExample
 
         inline constexpr auto Pins = ::prtn::pin::layout(
             ::prtn::pin::bind(PinId::Reset, GPIO_NUM_1, ::prtn::pin::Role::Output),
-            ::prtn::pin::bind(PinId::Sck, GPIO_NUM_36, ::prtn::pin::Role::SpiSck),
-            ::prtn::pin::bind(PinId::Mosi, GPIO_NUM_37, ::prtn::pin::Role::SpiMosi),
-            ::prtn::pin::bind(PinId::Cs, GPIO_NUM_35, ::prtn::pin::Role::SpiCs),
+            ::prtn::pin::bind(PinId::Sck, ::prtn::b::spi::sck, ::prtn::pin::Role::SpiSck),
+            ::prtn::pin::bind(PinId::Mosi, ::prtn::b::spi::mosi, ::prtn::pin::Role::SpiMosi),
+            ::prtn::pin::bind(PinId::Cs, ::prtn::b::spi::cs, ::prtn::pin::Role::SpiCs),
             ::prtn::pin::bind(PinId::Dc, GPIO_NUM_0, ::prtn::pin::Role::Output),
             ::prtn::pin::bind(PinId::Backlight, GPIO_NUM_10, ::prtn::pin::Role::Output));
 
