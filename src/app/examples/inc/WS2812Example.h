@@ -23,6 +23,8 @@ namespace WS2812Example
             LedData,
         };
 
+        using Color = Color;
+
         inline constexpr auto Pins = ::prtn::pin::layout(
             ::prtn::pin::bind(PinId::LedData, GPIO_NUM_48, ::prtn::pin::Role::RmtTx));
 

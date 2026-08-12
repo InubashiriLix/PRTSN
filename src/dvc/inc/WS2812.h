@@ -20,6 +20,8 @@ public:
     static constexpr uint32_t DefaultResetUs      = 80;
     static constexpr uint32_t DefaultTimeoutMs    = 20;
 
+    using Color = Color;
+
     enum class ColorOrder : uint8_t
     {
         RGB = 0,
