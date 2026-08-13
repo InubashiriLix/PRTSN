@@ -4,6 +4,7 @@
 #include "freertos/task.h"
 #include "src/dvc/inc/ST7735.h"
 #include "src/svc/inc/BleAgentLight/AgentRegistry.h"
+#include "src/svc/inc/BleAgentLight/AgentVisualTheme.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -26,15 +27,19 @@ namespace ble_agent_light
     {
     public:
         static constexpr uint16_t    SlotHeight     = 22;
-        static constexpr uint16_t    BarWidth       = 4;
-        static constexpr uint16_t    TextX          = 6;
+        static constexpr uint16_t    BarWidth       = 6;
+        static constexpr uint16_t    TextX          = 8;
         static constexpr std::size_t NameCharacters = 10;
         static constexpr std::size_t TextCharacters = 12;
 
         struct Config
         {
             /** FreeRTOS task stack depth (ESP-IDF measures this value in bytes). */
-            uint32_t stackDepth = 4096;
+            // Rendering keeps typed Result cause chains, text buffers and the
+            // ESP-IDF SPI polling frame on the same call stack. 4 KiB is not
+            // sufficient on ESP32-S3 and trips the FreeRTOS stack canary as
+            // soon as the first Agent slot is drawn.
+            uint32_t stackDepth = 8192;
             /** Display rendering task priority. */
             UBaseType_t priority = 4;
             /** ESP32-S3 application core by default; NimBLE is configured on Core 0. */

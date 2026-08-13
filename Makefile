@@ -25,6 +25,8 @@ BUILD_PROPERTIES = $(if $(BUILD_FLAGS),--build-property compiler.c.extra_flags="
 
 SERIAL_TUI_DIR := tools/serial-tui
 SERIAL_TUI_BIN := $(SERIAL_TUI_DIR)/target/release/serial-tui
+BLE_CLIENT_DIR := tools/ble-agent-client
+BLE_CLIENT_BIN := $(BLE_CLIENT_DIR)/target/release/ble-agent-client
 
 GIF ?=
 GIF_OUT ?= src/app/assets/boot-anim.h
@@ -54,7 +56,7 @@ GREEN  := \033[32m
 YELLOW := \033[33m
 CYAN   := \033[36m
 
-.PHONY: help info board-options check compdb build debug-build debug-server debug-gdb upload monitor monitor-arduino serial-tui tools gif-to-rgb565 list-ports clean clean-log format format-check
+.PHONY: help info board-options check compdb build debug-build debug-server debug-gdb upload monitor monitor-arduino serial-tui ble-client ble-scan ble-demo tools gif-to-rgb565 list-ports clean clean-log format format-check
 
 define section
 	@printf "\n$(BOLD)$(CYAN)==> %s$(RESET)\n" "$(1)"
@@ -102,6 +104,12 @@ help:
 	@printf "                    使用 arduino-cli 原生串口监视器\n"
 	@printf "  $(CYAN)make serial-tui$(RESET)   Build Rust serial TUI tool\n"
 	@printf "                    构建 Rust 串口 TUI 工具\n"
+	@printf "  $(CYAN)make ble-client$(RESET)   Build the Agent Panel BLE test client\n"
+	@printf "                    构建 Agent Panel BLE 测试客户端\n"
+	@printf "  $(CYAN)make ble-scan$(RESET)     Scan for nearby BLE devices\n"
+	@printf "                    扫描附近的 BLE 设备\n"
+	@printf "  $(CYAN)make ble-demo$(RESET)     Run the seven-Agent hardware test\n"
+	@printf "                    运行七个 Agent 的硬件验收测试\n"
 	@printf "  $(CYAN)make tools$(RESET)        Build local development tools\n"
 	@printf "                    构建本地开发工具\n"
 	@printf "  $(CYAN)make gif-to-rgb565 GIF=input.gif$(RESET) Convert GIF to LCD RGB565 header\n"
@@ -288,7 +296,21 @@ serial-tui:
 	@cargo build --release --manifest-path $(SERIAL_TUI_DIR)/Cargo.toml
 	$(call ok,serial TUI ready / 串口 TUI 已就绪)
 
-tools: serial-tui
+ble-client:
+	$(call section,Building BLE Agent client / 构建 BLE Agent 客户端)
+	$(call cmd,cargo build --release --manifest-path $(BLE_CLIENT_DIR)/Cargo.toml)
+	@cargo build --release --manifest-path $(BLE_CLIENT_DIR)/Cargo.toml
+	$(call ok,BLE Agent client ready / BLE Agent 客户端已就绪)
+
+ble-scan: ble-client
+	$(call section,Scanning BLE devices / 扫描 BLE 设备)
+	@$(BLE_CLIENT_BIN) scan
+
+ble-demo: ble-client
+	$(call section,Running BLE Agent hardware demo / 运行 BLE Agent 硬件测试)
+	@$(BLE_CLIENT_BIN) demo
+
+tools: serial-tui ble-client
 
 gif-to-rgb565:
 	$(call section,Converting GIF to LCD RGB565 / 转换 GIF 为 LCD RGB565)

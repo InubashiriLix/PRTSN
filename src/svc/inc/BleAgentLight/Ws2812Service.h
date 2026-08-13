@@ -6,6 +6,7 @@
 #include "src/dvc/inc/WS2812.h"
 #include "src/prt/BleAgentLightProtocol.h"
 #include "src/svc/inc/BleAgentLight/AgentRegistry.h"
+#include "src/svc/inc/BleAgentLight/AgentVisualTheme.h"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -16,16 +17,16 @@ namespace ble_agent_light
     class Ws2812Service
     {
     public:
-        // the fucking default colors
-        static constexpr Color kColorRegistered     = Color::fromHex("#606060");
-        static constexpr Color kColorOff            = Color::fromHex("#000000");
-        static constexpr Color kColorIdle           = Color::fromHex("#204060");
-        static constexpr Color kColorWorking        = Color::fromHex("#0080C0");
-        static constexpr Color kColorWaitPermission = Color::fromHex("#F05000");
-        static constexpr Color kColorWaitOption     = Color::fromHex("#FF2000");
-        static constexpr Color kColorDone           = Color::fromHex("#008040");
-        static constexpr Color kColorError          = Color::fromHex("#C00020");
-        static constexpr Color kColorDisconnected   = Color::fromHex("#FF0000");
+        // Public compatibility aliases; the shared theme is the source of truth.
+        static constexpr Color kColorRegistered     = AgentVisualTheme::Registered;
+        static constexpr Color kColorOff            = AgentVisualTheme::Off;
+        static constexpr Color kColorIdle           = AgentVisualTheme::Idle;
+        static constexpr Color kColorWorking        = AgentVisualTheme::Working;
+        static constexpr Color kColorWaitPermission = AgentVisualTheme::WaitPermission;
+        static constexpr Color kColorWaitOption     = AgentVisualTheme::WaitOption;
+        static constexpr Color kColorDone           = AgentVisualTheme::Done;
+        static constexpr Color kColorError          = AgentVisualTheme::Error;
+        static constexpr Color kColorDisconnected   = AgentVisualTheme::Disconnected;
 
         constexpr static gpio_num_t DefaultPinIo = GPIO_NUM_48;
 
@@ -274,24 +275,7 @@ namespace ble_agent_light
         }
 
         [[nodiscard]] constexpr static Color colorFor(protocol::AgentState state) noexcept {
-            switch (state) {
-                case protocol::AgentState::Off:
-                    return kColorOff;
-                case protocol::AgentState::Idle:
-                    return kColorIdle;
-                case protocol::AgentState::Working:
-                    return kColorWorking;
-                case protocol::AgentState::WaitPermission:
-                    return kColorWaitPermission;
-                case protocol::AgentState::WaitOption:
-                    return kColorWaitOption;
-                case protocol::AgentState::Done:
-                    return kColorDone;
-                case protocol::AgentState::Error:
-                    return kColorError;
-            }
-
-            return kColorError;
+            return AgentVisualTheme::state(state);
         }
 
         void handleState(uint8_t id, protocol::AgentState state) {
