@@ -6,6 +6,24 @@ display/WS2812 hardware behavior.
 用于测试 Agent Panel 协议，并把 Codex CLI 生命周期同步到 LCD/WS2812 的
 Linux/BlueZ 客户端。
 
+## Source layout / 源码分层
+
+The executable is split by feature; `main.rs` only parses the CLI and dispatches
+to one top-level operation.
+
+程序按功能拆分，`main.rs` 只负责解析参数并分派顶层操作：
+
+| Module | Responsibility / 职责 |
+| --- | --- |
+| `cli.rs` | CLI schema and shared runtime configuration / 命令行结构和运行配置 |
+| `commands.rs` | Manual commands and the hardware demo / 人工命令与硬件测试流程 |
+| `ble.rs` | BlueZ discovery, pairing, GATT transport and responses / BLE 发现、配对和 GATT 传输 |
+| `protocol.rs` | Typed Agent Panel wire encoding and validation / 协议帧编码和校验 |
+| `codex_hook.rs` | Codex hook JSON mapping and local IPC forwarding / Hook JSON 映射与本地 IPC |
+| `daemon.rs` | Unix socket server, BLE worker and synchronization / daemon 与 BLE 同步循环 |
+| `session.rs` | Per-Codex-session desired Agent state / 每个 Codex 会话的目标状态 |
+| `transcript.rs` | Incremental Ctrl-C/abort transcript detection / 增量检测中断事件 |
+
 ## Quick start
 
 Build and scan:
