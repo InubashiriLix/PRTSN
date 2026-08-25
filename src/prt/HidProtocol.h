@@ -5,6 +5,57 @@
 
 namespace prt_hid
 {
+    enum class ReportId : uint8_t
+    {
+        KEYBOARD = 1,
+        CONSUMER = 2,
+        SYSTEM   = 3,
+        MOUSE    = 4
+    };
+
+    struct KeyboardReport
+    {
+        uint8_t modifiers;
+        uint8_t keys[15];
+    } __attribute__((packed));
+
+    struct FeatureReport
+    {
+        uint8_t command;
+        uint8_t slot;
+        uint8_t usage_lo;
+        uint8_t usage_hi;
+        uint8_t layer;
+        uint8_t reserved[27];
+    } __attribute__((packed));
+
+    enum MouseBtn : uint8_t
+    {
+        None         = 0u,
+        MouseLeft    = 1u << 0,
+        MouseRight   = 1u << 1,
+        MouseMiddle  = 1u << 2,
+        MouseBack    = 1u << 3,
+        MouseForward = 1u << 4,
+    };
+
+    enum class KeyboardLed : uint8_t
+    {
+        None       = 0u,
+        NumLock    = 1u << 0,
+        CapsLock   = 1u << 1,
+        ScrollLock = 1u << 2,
+        Compose    = 1u << 3,
+        Kana       = 1u << 4,
+    };
+
+    struct MouseReport
+    {
+        MouseBtn buttons = MouseBtn::None;
+        int8_t   x       = 0;
+        int8_t   y       = 0;
+        int8_t   wheel   = 0;
+    } __attribute__((packed));
 
     // clang-format off
     // 说明：
@@ -101,7 +152,39 @@ namespace prt_hid
         0x75, 0x05,        //   Report Size (5)
         0x95, 0x01,        //   Report Count (1)
         0x81, 0x03,        //   Input (Const,Var,Abs)
-        0xC0               // End Collection
+        0xC0,               // End Collection
+
+        // ---------- Report ID 4: relative mouse / 相对位移鼠标 ----------
+        0x05, 0x01,       // Usage Page (Generic Desktop)
+        0x09, 0x02,       // Usage (Mouse)
+        0xA1, 0x01,       // Collection (Application)
+        0x85, 0x04,       //   Report ID (4)
+        0x09, 0x01,       //   Usage (Pointer)
+        0xA1, 0x00,       //   Collection (Physical)
+
+        0x05, 0x09,       //     Usage Page (Button)
+        0x19, 0x01,       //     Usage Minimum (Button 1)
+        0x29, 0x05,       //     Usage Maximum (Button 5)
+        0x15, 0x00,       //     Logical Minimum (0)
+        0x25, 0x01,       //     Logical Maximum (1)
+        0x75, 0x01,       //     Report Size (1 bit)
+        0x95, 0x05,       //     Report Count (5)
+        0x81, 0x02,       //     Input (Data, Variable, Absolute)
+        0x75, 0x03,       //     Report Size (3-bit padding)
+        0x95, 0x01,       //     Report Count (1)
+        0x81, 0x03,       //     Input (Constant, Variable, Absolute)
+
+        0x05, 0x01,       //     Usage Page (Generic Desktop)
+        0x09, 0x30,       //     Usage (X)
+        0x09, 0x31,       //     Usage (Y)
+        0x09, 0x38,       //     Usage (Wheel)
+        0x15, 0x81,       //     Logical Minimum (-127)
+        0x25, 0x7F,       //     Logical Maximum (127)
+        0x75, 0x08,       //     Report Size (8 bits)
+        0x95, 0x03,       //     Report Count (3)
+        0x81, 0x06,       //     Input (Data, Variable, Relative)
+        0xC0,             //   End Collection
+        0xC0,             // End Collection
     };
 
     enum class KeyId : uint8_t

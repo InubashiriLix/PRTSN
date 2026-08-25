@@ -53,7 +53,7 @@ Result<bool, StdErrors> NkroKeyboard::ready() {
 }
 
 uint16_t NkroKeyboard::_onGetFeature(uint8_t report_id, uint8_t* buffer, uint16_t len) {
-    if (buffer == nullptr || report_id != static_cast<uint8_t>(ReportId::KEYBOARD)) {
+    if (buffer == nullptr || report_id != static_cast<uint8_t>(prt_hid::ReportId::KEYBOARD)) {
         return 0;
     }
 
@@ -63,12 +63,12 @@ uint16_t NkroKeyboard::_onGetFeature(uint8_t report_id, uint8_t* buffer, uint16_
 }
 
 void NkroKeyboard::_onSetFeature(uint8_t report_id, const uint8_t* buffer, uint16_t len) {
-    if (buffer == nullptr || report_id != static_cast<uint8_t>(ReportId::KEYBOARD) || len < 4) {
+    if (buffer == nullptr || report_id != static_cast<uint8_t>(prt_hid::ReportId::KEYBOARD) || len < 4) {
         return;
     }
 
-    FeatureReport  report {};
-    const uint16_t report_len = sizeof(report) < len ? sizeof(report) : len;
+    prt_hid::FeatureReport report {};
+    const uint16_t         report_len = sizeof(report) < len ? sizeof(report) : len;
     memcpy(&report, buffer, report_len);
 
     m_pending_request          = report;
@@ -82,7 +82,7 @@ uint16_t NkroKeyboard::_onGetDescriptor(uint8_t* buffer) {
 
 void NkroKeyboard::_onOutput(uint8_t report_id, const uint8_t* buffer, uint16_t len) {
     // if the report_id is 1 (keyboard) and the length is between 1 and LED_NUM, copy the buffer to m_leds
-    if (report_id == static_cast<uint8_t>(ReportId::KEYBOARD) && buffer != nullptr && len >= 1 && len <= this->LED_NUM) {
+    if (report_id == static_cast<uint8_t>(prt_hid::ReportId::KEYBOARD) && buffer != nullptr && len >= 1 && len <= this->LED_NUM) {
         memcpy(m_leds, buffer, len);
     }
 }
@@ -146,7 +146,7 @@ Result<void, StdErrors> NkroKeyboard::updateKeyboardState(const uint8_t* usageBi
         }
     }
 
-    KeyboardReport nextReport {};
+    prt_hid::KeyboardReport nextReport {};
     nextReport.modifiers = usageBitmap[prt_hid::KEY_ID_MODIFIERS_START / 8];
     memcpy(nextReport.keys, usageBitmap, sizeof(nextReport.keys));
 
@@ -154,8 +154,8 @@ Result<void, StdErrors> NkroKeyboard::updateKeyboardState(const uint8_t* usageBi
         return Ok();
     }
 
-    const KeyboardReport previousReport = m_report;
-    m_report                            = nextReport;
+    const prt_hid::KeyboardReport previousReport = m_report;
+    m_report                                     = nextReport;
 
     auto result = sendKeyboard();
     if (result.is_err()) {
@@ -212,7 +212,7 @@ Result<void, StdErrors> NkroKeyboard::sendKeyboard() {
         return Err<StdError::INVALID_STATE>();
     }
 
-    if (!m_hid.SendReport(static_cast<uint8_t>(ReportId::KEYBOARD), &m_report, sizeof(m_report))) {
+    if (!m_hid.SendReport(static_cast<uint8_t>(prt_hid::ReportId::KEYBOARD), &m_report, sizeof(m_report))) {
         return Err<StdError::FAIL>();
     }
     return Ok();
@@ -223,7 +223,7 @@ Result<void, StdErrors> NkroKeyboard::sendConsumer() {
         return Err<StdError::INVALID_STATE>();
     }
 
-    if (!m_hid.SendReport(static_cast<uint8_t>(ReportId::CONSUMER), &m_consumer, sizeof(m_consumer))) {
+    if (!m_hid.SendReport(static_cast<uint8_t>(prt_hid::ReportId::CONSUMER), &m_consumer, sizeof(m_consumer))) {
         return Err<StdError::FAIL>();
     }
     return Ok();
@@ -233,7 +233,7 @@ Result<void, StdErrors> NkroKeyboard::sendSystem() {
         return Err<StdError::INVALID_STATE>();
     }
 
-    if (!m_hid.SendReport(static_cast<uint8_t>(ReportId::SYSTEM), &m_system, sizeof(m_system))) {
+    if (!m_hid.SendReport(static_cast<uint8_t>(prt_hid::ReportId::SYSTEM), &m_system, sizeof(m_system))) {
         return Err<StdError::FAIL>();
     }
     return Ok();
