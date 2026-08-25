@@ -18,7 +18,7 @@ esp32:esp32:AirM2M_CORE_ESP32C3
 
 ```text
 prtn/
-├── PRTN.ino
+├── PRTSN.ino
 ├── Makefile
 ├── README.md
 ├── config/
@@ -68,6 +68,32 @@ cfg       -> profile selection and app-level constexpr configuration
 ```
 
 ## Build
+
+### Nix development shell
+
+With Nix flakes enabled, enter the development environment with:
+
+```bash
+nix develop
+```
+
+If you use direnv, run `direnv allow` once; the checked-in `.envrc` will then
+load the same shell automatically. The shell provides Arduino CLI and language
+server tooling, clang/clangd, Rust/Cargo, jq, and Python with Pillow.
+
+The ESP32 Arduino core is stateful board data and must be installed once per
+user (outside the Nix store):
+
+```bash
+ESP32_INDEX_URL=https://espressif.github.io/arduino-esp32/package_esp32_index.json
+arduino-cli config add board_manager.additional_urls "$ESP32_INDEX_URL"
+arduino-cli core update-index
+arduino-cli core install esp32:esp32
+make check
+```
+
+Access to upload and monitor hardware also requires your user account to have
+permission to open the relevant `/dev/ttyUSB*` or `/dev/ttyACM*` device.
 
 Project build defaults live in:
 
