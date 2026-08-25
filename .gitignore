@@ -1,4 +1,5 @@
 compile_commands.json
+.direnv/
 config/local.mk
 .clangd-db/
 build/
