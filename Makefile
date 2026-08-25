@@ -43,7 +43,7 @@ OPENOCD_SCRIPTS := $(OPENOCD_ROOT)/share/openocd/scripts
 GDB_TARGET_ARCH ?= riscv32-esp-elf
 GDB_ROOT := $(lastword $(sort $(wildcard $(ESP32_TOOLS)/$(GDB_TARGET_ARCH)-gdb/*)))
 GDB_BIN := $(GDB_ROOT)/bin/$(GDB_TARGET_ARCH)-gdb
-DEBUG_ELF := $(BUILD_DIR)/PRTN.ino.elf
+DEBUG_ELF := $(BUILD_DIR)/PRTSN.ino.elf
 DEBUG_GDB_PORT ?= 3333
 
 FORMAT_FILES := $(shell git ls-files '*.h' '*.hpp' '*.c' '*.cpp' '*.cc' '*.cxx' '*.ino')
@@ -211,7 +211,8 @@ check:
 	$(call section,Checking ESP32 Arduino core / 检查 ESP32 Arduino core)
 	@arduino-cli core list | grep -q "esp32:esp32" || { \
 		printf "$(RED)✗ Missing core: esp32:esp32 / 缺少 ESP32 core$(RESET)\n"; \
-		printf "Run / 运行:\n  arduino-cli core install esp32:esp32\n"; \
+		printf "See the Nix development shell setup in README.md.\n"; \
+		printf "请参考 README.md 中的 Nix 开发环境配置。\n"; \
 		exit 1; \
 	}
 	$(call ok,esp32:esp32 core installed / ESP32 core 已安装)

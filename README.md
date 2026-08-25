@@ -18,7 +18,7 @@ esp32:esp32:AirM2M_CORE_ESP32C3
 
 ```text
 prtn/
-├── PRTN.ino
+├── PRTSN.ino
 ├── Makefile
 ├── README.md
 ├── config/
@@ -85,6 +85,8 @@ The ESP32 Arduino core is stateful board data and must be installed once per
 user (outside the Nix store):
 
 ```bash
+ESP32_INDEX_URL=https://espressif.github.io/arduino-esp32/package_esp32_index.json
+arduino-cli config add board_manager.additional_urls "$ESP32_INDEX_URL"
 arduino-cli core update-index
 arduino-cli core install esp32:esp32
 make check
