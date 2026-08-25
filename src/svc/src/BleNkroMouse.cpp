@@ -70,6 +70,7 @@ namespace prt_ble_hid
         if (!isReady()) {
             return Err<BleNkroMouse::Detail::NotReady>();
         }
+        // if the keyboard input is null, we can't send the keyboard report
         if (m_keyboardInput == nullptr)
             return Ok(false);
         m_keyboardInput->setValue(reinterpret_cast<const uint8_t*>(&m_keyboard), sizeof(m_keyboard));
@@ -81,6 +82,9 @@ namespace prt_ble_hid
         prepareState();
         if (!isReady())
             return Err<BleNkroMouse::Detail::NotReady>();
+        if (m_keyboardInput == nullptr)
+            return Err<BleNkroMouse::Detail::KeyboardInputNullError>();
+
         const uint8_t usage = static_cast<uint8_t>(key);
         if (usage >= 0xE0 && usage <= 0xE7) {
             const uint8_t mask = uint8_t(1u << (usage - 0xE0));
@@ -106,6 +110,33 @@ namespace prt_ble_hid
         else
             return Err(sendKeyboardResult.error());
         return Ok(false);
+    }
+
+    // TODO: half way still
+    BleNkroMouse::ReleaseAllKeyResult BleNkroMouse::releaseAllKeys() {
+        prepareState();
+        if (!isReady())
+            return Err<BleNkroMouse::Detail::NotReady>();
+        m_keyboard                    = {};
+        const auto sendKeyboardResult = sendKeyboard();
+        if (sendKeyboardResult.is_ok()) {
+            return Ok(true);
+        }
+        else
+            return Err(sendKeyboardResult.error());
+        return Ok(false);
+    }
+
+    BleNkroMouse::MoveMouseResult BleNkroMouse::moveMouse(int8_t x, int8_t y, int8_t wheel) {
+        prepareState();
+        if (!isReady())
+            return Err<BleNkroMouse::Detail::NotReady>();
+        if (m_mouseInput == nullptr)
+            return Err<BleNkroMouse::Detail::MouseInputNullError>();
+        const prt_hid::MouseReport report {.buttons = m_mouseBtn, .x = x, .y = y, .wheel = wheel};
+        m_mouseInput->setValue(reinterpret_cast<const uint8_t*>(&report), sizeof(report));
+        m_mouseInput->notify();
+        return Ok(true);
     }
 
 }

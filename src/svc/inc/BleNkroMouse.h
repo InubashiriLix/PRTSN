@@ -34,6 +34,8 @@ namespace prt_ble_hid
             KeyboardOutputCreateFailed,
             MouseInputCreateFailed,
             AdvertisingCreateFailed,
+            MouseInputNullError,
+            KeyboardInputNullError,
         };
 
     public:
@@ -57,13 +59,13 @@ namespace prt_ble_hid
         using SendKeyboardResult = Result<bool, ErrorSet<Detail::NotStarted, Detail::NotReady>>;
         SendKeyboardResult sendKeyboard();
 
-        using SetKeyResult = Result<bool, ErrorSet<Detail::NotReady, Detail::NotStarted>>;
+        using SetKeyResult = Result<bool, ErrorSet<Detail::NotStarted, Detail::NotReady, Detail::KeyboardInputNullError>>;
         [[nodiscard]] SetKeyResult setKey(prt_hid::KeyId key, bool pressed);
 
-        using ReleaseAllKeyResult = Result<bool, ErrorSet<Detail::NotStarted, Detail::NotStarted>>;
+        using ReleaseAllKeyResult = Result<bool, ErrorSet<Detail::NotStarted, Detail::NotStarted, Detail::KeyboardInputNullError>>;
         [[nodiscard]] ReleaseAllKeyResult releaseAllKeys();
 
-        using MoveMouseResult = Result<bool, ErrorSet<Detail::NotStarted, Detail::NotReady>>;
+        using MoveMouseResult = Result<bool, ErrorSet<Detail::NotStarted, Detail::NotReady, Detail::MouseInputNullError>>;
         [[nodiscard]] MoveMouseResult moveMouse(int8_t x, int8_t y, int8_t wheel);
 
     private:
