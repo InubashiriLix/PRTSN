@@ -29,7 +29,7 @@ namespace prt_hid
         uint8_t reserved[27];
     } __attribute__((packed));
 
-    enum MouseBtn : uint8_t
+    enum class MouseBtn : uint8_t
     {
         None         = 0u,
         MouseLeft    = 1u << 0,
@@ -38,6 +38,28 @@ namespace prt_hid
         MouseBack    = 1u << 3,
         MouseForward = 1u << 4,
     };
+
+    constexpr MouseBtn operator|(MouseBtn a, MouseBtn b) {
+        return static_cast<MouseBtn>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
+    }
+
+    constexpr MouseBtn operator&(MouseBtn a, MouseBtn b) {
+        return static_cast<MouseBtn>(static_cast<uint8_t>(a) & static_cast<uint8_t>(b));
+    }
+
+    constexpr MouseBtn operator~(MouseBtn a) {
+        return static_cast<MouseBtn>(~static_cast<uint8_t>(a));
+    }
+
+    constexpr MouseBtn& operator|=(MouseBtn& a, MouseBtn b) {
+        a = a | b;
+        return a;
+    }
+
+    constexpr MouseBtn& operator&=(MouseBtn& a, MouseBtn b) {
+        a = a & b;
+        return a;
+    }
 
     enum class KeyboardLed : uint8_t
     {

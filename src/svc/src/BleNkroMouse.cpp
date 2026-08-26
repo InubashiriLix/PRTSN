@@ -91,7 +91,7 @@ namespace prt_ble_hid
             if (pressed)
                 m_keyboard.modifiers |= mask;
             else
-                m_keyboard.modifiers |= uint8_t(~mask);
+                m_keyboard.modifiers &= uint8_t(~mask);
         }
         else if (usage <= 0x77) {
             const uint8_t mask = uint8_t(1u << (usage & 0x07));
@@ -112,7 +112,6 @@ namespace prt_ble_hid
         return Ok(false);
     }
 
-    // TODO: half way still
     BleNkroMouse::ReleaseAllKeyResult BleNkroMouse::releaseAllKeys() {
         prepareState();
         if (!isReady())
@@ -137,6 +136,18 @@ namespace prt_ble_hid
         m_mouseInput->setValue(reinterpret_cast<const uint8_t*>(&report), sizeof(report));
         m_mouseInput->notify();
         return Ok(true);
+    }
+
+    BleNkroMouse::SetMouseBtnResult BleNkroMouse::setMouseBtn(prt_hid::MouseBtn btn, bool pressed) {
+        prepareState();
+        if (!isReady())
+            return Err<BleNkroMouse::Detail::NotReady>();
+
+        if (pressed)
+            m_mouseBtn |= btn;
+        else
+            m_mouseBtn &= ~btn;
+        return moveMouse(0, 0, 0);
     }
 
 }

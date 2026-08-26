@@ -14,6 +14,10 @@
 // the sideeffect of pill make me sleepy
 // and the annogying ideas are gone
 
+// TODO: reaname this as BleHidNkroKeyboardMouse
+// TODO: make this service hold the reference to the device of keyboard and mouse
+// the keybaord should be a scanner with interface in IKeyboardScanDevice, and mouse Interface and Device should be created
+//
 namespace prt_ble_hid
 {
 
@@ -62,11 +66,18 @@ namespace prt_ble_hid
         using SetKeyResult = Result<bool, ErrorSet<Detail::NotStarted, Detail::NotReady, Detail::KeyboardInputNullError>>;
         [[nodiscard]] SetKeyResult setKey(prt_hid::KeyId key, bool pressed);
 
-        using ReleaseAllKeyResult = Result<bool, ErrorSet<Detail::NotStarted, Detail::NotStarted, Detail::KeyboardInputNullError>>;
+        using ReleaseAllKeyResult = Result<bool, ErrorSet<Detail::NotStarted, Detail::NotReady, Detail::KeyboardInputNullError>>;
         [[nodiscard]] ReleaseAllKeyResult releaseAllKeys();
 
         using MoveMouseResult = Result<bool, ErrorSet<Detail::NotStarted, Detail::NotReady, Detail::MouseInputNullError>>;
         [[nodiscard]] MoveMouseResult moveMouse(int8_t x, int8_t y, int8_t wheel);
+
+        using SetMouseBtnResult = Result<bool, ErrorSet<Detail::NotStarted, Detail::NotReady, Detail::MouseInputNullError>>;
+        [[nodiscard]] SetMouseBtnResult setMouseBtn(prt_hid::MouseBtn btn, bool pressed);
+
+        prt_hid::KeyboardLed getKeyboardLeds() const noexcept {
+            return m_keyboardLeds.load(std::memory_order_acquire);
+        }
 
     private:
         class ServerCallbacks final : public BLEServerCallbacks
