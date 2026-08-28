@@ -15,6 +15,7 @@
           python = pkgs.python3.withPackages (pythonPackages: [
             pythonPackages.pillow
           ]);
+          esp32ArduinoCore = pkgs.callPackage ./nix/esp32-arduino-core.nix { };
         in
         {
           default = pkgs.mkShell {
@@ -34,9 +35,16 @@
               dbus
             ];
 
+            ARDUINO_DIRECTORIES_DATA = "${esp32ArduinoCore}/share/arduino";
+            ARDUINO_ESP32_TOOLS = "${esp32ArduinoCore}/share/arduino/packages/esp32/tools";
+
             shellHook = ''
+              export ARDUINO_DIRECTORIES_DOWNLOADS="$PWD/.cache/arduino-cli/downloads"
+              export ARDUINO_DIRECTORIES_USER="$PWD/.cache/arduino-cli/user"
+              mkdir -p "$ARDUINO_DIRECTORIES_DOWNLOADS" "$ARDUINO_DIRECTORIES_USER"
               echo "PRTSN development shell"
-              echo "Run 'make check' to verify the ESP32 core and board setup."
+              echo "Arduino ESP32 Core 3.3.8 is provided by Nix."
+              echo "Run 'make check' to verify the board setup."
             '';
           };
         });

@@ -81,16 +81,18 @@ If you use direnv, run `direnv allow` once; the checked-in `.envrc` will then
 load the same shell automatically. The shell provides Arduino CLI and language
 server tooling, clang/clangd, Rust/Cargo, jq, and Python with Pillow.
 
-The ESP32 Arduino core is stateful board data and must be installed once per
-user (outside the Nix store):
+The ESP32 Arduino Core 3.3.8 and its cross-compilers, debugger, OpenOCD and
+support tools are pinned by the flake and stored in the Nix store. No
+`~/.arduino15` setup is required:
 
 ```bash
-ESP32_INDEX_URL=https://espressif.github.io/arduino-esp32/package_esp32_index.json
-arduino-cli config add board_manager.additional_urls "$ESP32_INDEX_URL"
-arduino-cli core update-index
-arduino-cli core install esp32:esp32
 make check
+make compdb
 ```
+
+The shell points Arduino CLI at the immutable Nix-provided core and keeps only
+disposable download/user state under the repository's ignored `.cache/`
+directory.
 
 Access to upload and monitor hardware also requires your user account to have
 permission to open the relevant `/dev/ttyUSB*` or `/dev/ttyACM*` device.

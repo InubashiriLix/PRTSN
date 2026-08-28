@@ -30,7 +30,7 @@ if codelldb == "" then
 	codelldb = newest_glob("~/.local/share/nvim/mason/packages/codelldb/extension/adapter/codelldb")
 end
 
-local esp32_tools = vim.fn.expand("~/.arduino15/packages/esp32/tools")
+local esp32_tools = vim.env.ARDUINO_ESP32_TOOLS or ""
 local query_drivers = table.concat({
 	esp32_tools .. "/esp-x32/*/bin/*",
 	esp32_tools .. "/esp-rv32/*/bin/*",
