@@ -30,7 +30,13 @@ Result<void, StdErrors> NkroKeyboard::setup() {
         m_hid.end();
         return Err<StdError::FAIL>();
     }
-    m_started = true;
+    m_report                    = {};
+    m_lastSentReport            = {};
+    m_lastSentReportValid       = false;
+    m_mouseButtons              = prt_hid::MouseBtn::None;
+    m_lastSentMouseButtons      = prt_hid::MouseBtn::None;
+    m_lastSentMouseButtonsValid = false;
+    m_started                   = true;
 
     return Ok();
 }
@@ -40,7 +46,9 @@ Result<void, StdErrors> NkroKeyboard::end() {
         return Err<StdError::INVALID_STATE>();
     }
     m_hid.end();
-    m_started = false;
+    m_started                   = false;
+    m_lastSentReportValid       = false;
+    m_lastSentMouseButtonsValid = false;
 
     return Ok();
 }
@@ -49,7 +57,12 @@ Result<bool, StdErrors> NkroKeyboard::ready() {
     if (!m_started) {
         return Err<StdError::INVALID_STATE>();
     }
-    return Ok(m_hid.ready());
+    const bool isReady = m_hid.ready();
+    if (!isReady) {
+        m_lastSentReportValid       = false;
+        m_lastSentMouseButtonsValid = false;
+    }
+    return Ok(isReady);
 }
 
 uint16_t NkroKeyboard::_onGetFeature(uint8_t report_id, uint8_t* buffer, uint16_t len) {
@@ -88,13 +101,7 @@ void NkroKeyboard::_onOutput(uint8_t report_id, const uint8_t* buffer, uint16_t 
 }
 
 Result<void, StdErrors> NkroKeyboard::press(uint8_t usage) {
-    if (isModifier(usage)) {
-        m_report.modifiers |= uint8_t(1u << (usage & 0x07));
-    }
-    else if (usage <= prt_hid::KEY_ID_NKRO_MAX) {
-        m_report.keys[usage >> 3] |= (1u << (usage & 0x07));
-    }
-    else {
+    if (!prt_hid::setKeyboardKey(m_report, static_cast<prt_hid::KeyId>(usage), true)) {
         return Err<StdError::INVALID_ARGUMENT>();
     }
 
@@ -102,13 +109,7 @@ Result<void, StdErrors> NkroKeyboard::press(uint8_t usage) {
 }
 
 Result<void, StdErrors> NkroKeyboard::release(uint8_t usage) {
-    if (isModifier(usage)) {
-        m_report.modifiers &= uint8_t(~(1u << (usage & 0x07)));
-    }
-    else if (usage <= prt_hid::KEY_ID_NKRO_MAX) {
-        clearBit(m_report.keys, usage);
-    }
-    else {
+    if (!prt_hid::setKeyboardKey(m_report, static_cast<prt_hid::KeyId>(usage), false)) {
         return Err<StdError::INVALID_ARGUMENT>();
     }
     return sendKeyboard();
@@ -127,41 +128,40 @@ Result<void, StdErrors> NkroKeyboard::releaseAll() {
     if (result.is_err()) {
         return result;
     }
-    return sendConsumer();
+    result = sendConsumer();
+    if (result.is_err()) {
+        return result;
+    }
+
+    m_mouseButtons = prt_hid::MouseBtn::None;
+    return sendMouse({});
 }
 
-Result<void, StdErrors> NkroKeyboard::updateKeyboardState(const uint8_t* usageBitmap, size_t usageBitmapSize) {
-    if (usageBitmap == nullptr || usageBitmapSize != KEY_USAGE_BITMAP_SIZE) {
+Result<void, StdErrors> NkroKeyboard::updateKeyboardState(const prt_hid::KeyboardReport& report) {
+    m_report = report;
+    return sendKeyboard();
+}
+
+Result<void, StdErrors> NkroKeyboard::updateMouseState(const prt_hid::MouseReport& report) {
+    if (!prt_hid::isMouseReportValid(report)) {
         return Err<StdError::INVALID_ARGUMENT>();
     }
 
-    for (size_t index = sizeof(m_report.keys); index < prt_hid::KEY_ID_MODIFIERS_START / 8; ++index) {
-        if (usageBitmap[index] != 0) {
-            return Err<StdError::INVALID_ARGUMENT>();
-        }
-    }
-    for (size_t index = prt_hid::KEY_ID_MODIFIERS_END / 8 + 1; index < usageBitmapSize; ++index) {
-        if (usageBitmap[index] != 0) {
-            return Err<StdError::INVALID_ARGUMENT>();
-        }
-    }
+    m_mouseButtons = report.buttons;
+    return sendMouse(report);
+}
 
-    prt_hid::KeyboardReport nextReport {};
-    nextReport.modifiers = usageBitmap[prt_hid::KEY_ID_MODIFIERS_START / 8];
-    memcpy(nextReport.keys, usageBitmap, sizeof(nextReport.keys));
+Result<void, StdErrors> NkroKeyboard::moveMouse(int8_t x, int8_t y, int8_t wheel) {
+    return updateMouseState({.buttons = m_mouseButtons, .x = x, .y = y, .wheel = wheel});
+}
 
-    if (memcmp(&m_report, &nextReport, sizeof(m_report)) == 0) {
-        return Ok();
+Result<void, StdErrors> NkroKeyboard::setMouseBtn(prt_hid::MouseBtn buttonMask, bool pressed) {
+    auto nextButtons = m_mouseButtons;
+    if (!prt_hid::setMouseButton(nextButtons, buttonMask, pressed)) {
+        return Err<StdError::INVALID_ARGUMENT>();
     }
 
-    const prt_hid::KeyboardReport previousReport = m_report;
-    m_report                                     = nextReport;
-
-    auto result = sendKeyboard();
-    if (result.is_err()) {
-        m_report = previousReport;
-    }
-    return result;
+    return updateMouseState({.buttons = nextButtons});
 }
 
 Result<void, StdErrors> NkroKeyboard::pressConsumer(uint16_t usage) {
@@ -198,23 +198,35 @@ void NkroKeyboard::resetKeyMapping() {
     m_pending_request = {};
 }
 
-/// tell wheter given usage is a modifier key (E0 ~ E7)
-inline bool NkroKeyboard::isModifier(uint8_t usage) {
-    return usage >= prt_hid::KEY_ID_MODIFIERS_START && usage <= prt_hid::KEY_ID_MODIFIERS_END;
-}
-/// clear a bit in the bitmap for the given usage
-inline void NkroKeyboard::clearBit(uint8_t* bitmap, uint8_t usage) {
-    bitmap[usage >> 3] &= uint8_t(~(1u << (usage & 0x07)));
-}
-
 Result<void, StdErrors> NkroKeyboard::sendKeyboard() {
     if (!m_started) {
         return Err<StdError::INVALID_STATE>();
     }
 
+    if (m_lastSentReportValid && prt_hid::keyboardReportsEqual(m_report, m_lastSentReport)) {
+        return Ok();
+    }
     if (!m_hid.SendReport(static_cast<uint8_t>(prt_hid::ReportId::KEYBOARD), &m_report, sizeof(m_report))) {
         return Err<StdError::FAIL>();
     }
+    m_lastSentReport      = m_report;
+    m_lastSentReportValid = true;
+    return Ok();
+}
+
+Result<void, StdErrors> NkroKeyboard::sendMouse(const prt_hid::MouseReport& report) {
+    if (!m_started) {
+        return Err<StdError::INVALID_STATE>();
+    }
+    if (!prt_hid::hasMouseMotion(report) && m_lastSentMouseButtonsValid && report.buttons == m_lastSentMouseButtons) {
+        return Ok();
+    }
+    if (!m_hid.SendReport(static_cast<uint8_t>(prt_hid::ReportId::MOUSE), &report, sizeof(report))) {
+        return Err<StdError::FAIL>();
+    }
+
+    m_lastSentMouseButtons      = report.buttons;
+    m_lastSentMouseButtonsValid = true;
     return Ok();
 }
 

@@ -5,6 +5,8 @@
 
 namespace prt_hid
 {
+    constexpr static size_t KEYBOARD_NKRO_BITMAP_SIZE = 15;
+
     enum class ReportId : uint8_t
     {
         KEYBOARD = 1,
@@ -15,9 +17,11 @@ namespace prt_hid
 
     struct KeyboardReport
     {
-        uint8_t modifiers;
-        uint8_t keys[15];
+        uint8_t modifiers = 0;
+        uint8_t keys[KEYBOARD_NKRO_BITMAP_SIZE] {};
     } __attribute__((packed));
+
+    static_assert(sizeof(KeyboardReport) == 16, "KeyboardReport must match the HID descriptor");
 
     struct FeatureReport
     {
@@ -78,6 +82,48 @@ namespace prt_hid
         int8_t   y       = 0;
         int8_t   wheel   = 0;
     } __attribute__((packed));
+
+    constexpr static uint8_t MOUSE_BUTTON_MASK = 0x1F;
+    constexpr static int8_t  MOUSE_DELTA_MIN   = -127;
+    constexpr static int8_t  MOUSE_DELTA_MAX   = 127;
+
+    static_assert(sizeof(MouseReport) == 4, "MouseReport must match the HID descriptor");
+
+    constexpr bool isMouseButtonMaskValid(MouseBtn buttons) {
+        return (static_cast<uint8_t>(buttons) & static_cast<uint8_t>(~MOUSE_BUTTON_MASK)) == 0;
+    }
+
+    constexpr bool setMouseButton(MouseBtn& buttons, MouseBtn buttonMask, bool pressed) {
+        if (!isMouseButtonMaskValid(buttons) || !isMouseButtonMaskValid(buttonMask)) {
+            return false;
+        }
+        if (pressed) {
+            buttons |= buttonMask;
+        }
+        else {
+            buttons &= ~buttonMask;
+        }
+        return true;
+    }
+
+    constexpr int8_t clampMouseDelta(int32_t delta) {
+        if (delta < MOUSE_DELTA_MIN) {
+            return MOUSE_DELTA_MIN;
+        }
+        if (delta > MOUSE_DELTA_MAX) {
+            return MOUSE_DELTA_MAX;
+        }
+        return static_cast<int8_t>(delta);
+    }
+
+    constexpr bool isMouseReportValid(const MouseReport& report) {
+        return isMouseButtonMaskValid(report.buttons) && report.x >= MOUSE_DELTA_MIN && report.y >= MOUSE_DELTA_MIN &&
+               report.wheel >= MOUSE_DELTA_MIN;
+    }
+
+    constexpr bool hasMouseMotion(const MouseReport& report) {
+        return report.x != 0 || report.y != 0 || report.wheel != 0;
+    }
 
     // clang-format off
     // 说明：
@@ -408,6 +454,55 @@ namespace prt_hid
     constexpr static uint8_t  KEY_ID_NKRO_MAX        = 0x77;
     constexpr static uint16_t HID_CONSUMER_USAGE_MAX = 0x03FF;
     constexpr static size_t   HID_FEATURE_MAX_SLOTS  = 256;
+
+    constexpr bool isKeyboardModifier(KeyId key) {
+        const auto usage = static_cast<uint8_t>(key);
+        return usage >= KEY_ID_MODIFIERS_START && usage <= KEY_ID_MODIFIERS_END;
+    }
+
+    constexpr bool isKeyboardKey(KeyId key) {
+        const auto usage = static_cast<uint8_t>(key);
+        return key != KeyId::None && (usage <= KEY_ID_NKRO_MAX || isKeyboardModifier(key));
+    }
+
+    constexpr bool setKeyboardKey(KeyboardReport& report, KeyId key, bool pressed) {
+        if (!isKeyboardKey(key)) {
+            return false;
+        }
+
+        const auto usage = static_cast<uint8_t>(key);
+        if (isKeyboardModifier(key)) {
+            const auto mask = static_cast<uint8_t>(1u << (usage - KEY_ID_MODIFIERS_START));
+            if (pressed) {
+                report.modifiers |= mask;
+            }
+            else {
+                report.modifiers &= static_cast<uint8_t>(~mask);
+            }
+            return true;
+        }
+
+        const auto mask = static_cast<uint8_t>(1u << (usage & 0x07));
+        if (pressed) {
+            report.keys[usage >> 3] |= mask;
+        }
+        else {
+            report.keys[usage >> 3] &= static_cast<uint8_t>(~mask);
+        }
+        return true;
+    }
+
+    constexpr bool keyboardReportsEqual(const KeyboardReport& lhs, const KeyboardReport& rhs) {
+        if (lhs.modifiers != rhs.modifiers) {
+            return false;
+        }
+        for (size_t index = 0; index < KEYBOARD_NKRO_BITMAP_SIZE; ++index) {
+            if (lhs.keys[index] != rhs.keys[index]) {
+                return false;
+            }
+        }
+        return true;
+    }
 
     // clang-format on
 

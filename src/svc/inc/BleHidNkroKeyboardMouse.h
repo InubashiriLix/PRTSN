@@ -39,6 +39,7 @@ namespace prt_ble_hid
             AdvertisingCreateFailed,
             MouseInputNullError,
             KeyboardInputNullError,
+            InvalidMouseReport,
         };
 
     public:
@@ -51,16 +52,21 @@ namespace prt_ble_hid
             if (!m_resetPending.exchange(false, std::memory_order_acq_rel)) {
                 return;
             }
-            m_keyboard = {};
-            m_mouseBtn = prt_hid::MouseBtn::None;
+            m_keyboard                  = {};
+            m_lastSentKeyboard          = {};
+            m_lastSentKeyboardValid     = false;
+            m_lastSentMouseButtonsValid = false;
         }
 
         [[nodiscard]] bool isReady() const noexcept {
             return m_started && isConnected();
         }
 
-        using SendKeyboardResult = Result<bool, ErrorSet<Detail::NotStarted, Detail::NotReady>>;
+        using SendKeyboardResult = Result<bool, ErrorSet<Detail::NotStarted, Detail::NotReady, Detail::KeyboardInputNullError>>;
         SendKeyboardResult sendKeyboard();
+
+        using UpdateKeyboardStateResult = SendKeyboardResult;
+        [[nodiscard]] UpdateKeyboardStateResult updateKeyboardState(const prt_hid::KeyboardReport& report);
 
         using SetKeyResult = Result<bool, ErrorSet<Detail::NotStarted, Detail::NotReady, Detail::KeyboardInputNullError>>;
         [[nodiscard]] SetKeyResult setKey(prt_hid::KeyId key, bool pressed);
@@ -68,10 +74,13 @@ namespace prt_ble_hid
         using ReleaseAllKeyResult = Result<bool, ErrorSet<Detail::NotStarted, Detail::NotReady, Detail::KeyboardInputNullError>>;
         [[nodiscard]] ReleaseAllKeyResult releaseAllKeys();
 
-        using MoveMouseResult = Result<bool, ErrorSet<Detail::NotStarted, Detail::NotReady, Detail::MouseInputNullError>>;
+        using UpdateMouseStateResult = Result<bool, ErrorSet<Detail::NotStarted, Detail::NotReady, Detail::MouseInputNullError, Detail::InvalidMouseReport>>;
+        [[nodiscard]] UpdateMouseStateResult updateMouseState(const prt_hid::MouseReport& report);
+
+        using MoveMouseResult = UpdateMouseStateResult;
         [[nodiscard]] MoveMouseResult moveMouse(int8_t x, int8_t y, int8_t wheel);
 
-        using SetMouseBtnResult = Result<bool, ErrorSet<Detail::NotStarted, Detail::NotReady, Detail::MouseInputNullError>>;
+        using SetMouseBtnResult = UpdateMouseStateResult;
         [[nodiscard]] SetMouseBtnResult setMouseBtn(prt_hid::MouseBtn btn, bool pressed);
 
         prt_hid::KeyboardLed getKeyboardLeds() const noexcept {
@@ -103,7 +112,8 @@ namespace prt_ble_hid
             void onWrite(BLECharacteristic* characteristic) override {
                 if ((characteristic == nullptr) || characteristic->getLength() < 1)
                     return;
-                // m_owner.m_ledCallbacks.store(characteristic->getData()[0], std::memory_order_release);
+                const auto leds = static_cast<prt_hid::KeyboardLed>(characteristic->getData()[0] & 0x1F);
+                m_owner.m_keyboardLeds.store(leds, std::memory_order_release);
             }
 
         private:
@@ -121,15 +131,21 @@ namespace prt_ble_hid
         BLECharacteristic* m_mouseInput     = nullptr;
 
         prt_hid::KeyboardReport m_keyboard {};
-        prt_hid::MouseBtn       m_mouseBtn = prt_hid::MouseBtn::None;
+        prt_hid::KeyboardReport m_lastSentKeyboard {};
+        prt_hid::MouseBtn       m_mouseBtn             = prt_hid::MouseBtn::None;
+        prt_hid::MouseBtn       m_lastSentMouseButtons = prt_hid::MouseBtn::None;
 
         std::atomic_bool                  m_connected {false};
         std::atomic_bool                  m_resetPending {false};
         std::atomic<prt_hid::KeyboardLed> m_keyboardLeds {prt_hid::KeyboardLed::None};
-        bool                              m_started = false;
+        bool                              m_started {false};
+        bool                              m_lastSentKeyboardValid {false};
+        bool                              m_lastSentMouseButtonsValid {false};
 
         ServerCallbacks m_serverCallbacks;
         LedCallbacks    m_ledCallbacks;
+
+        UpdateMouseStateResult sendMouse(const prt_hid::MouseReport& report);
     };
 
 }

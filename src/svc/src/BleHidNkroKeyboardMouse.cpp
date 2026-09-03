@@ -33,10 +33,10 @@ namespace prt_ble_hid
         if (m_keyboardInput == nullptr)
             return Err<Detail::KeyboardInputCreateFailed>();
 
-        m_keyboardInput = m_hid->outputReport(static_cast<uint8_t>(prt_hid::ReportId::KEYBOARD));
+        m_keyboardOutput = m_hid->outputReport(static_cast<uint8_t>(prt_hid::ReportId::KEYBOARD));
         if (m_keyboardOutput == nullptr)
             return Err<Detail::KeyboardOutputCreateFailed>();
-        m_keyboardOutput = m_hid->inputReport(static_cast<uint8_t>(prt_hid::ReportId::MOUSE));
+        m_mouseInput = m_hid->inputReport(static_cast<uint8_t>(prt_hid::ReportId::MOUSE));
         if (m_mouseInput == nullptr)
             return Err<Detail::MouseInputCreateFailed>();
 
@@ -56,7 +56,13 @@ namespace prt_ble_hid
         advertising->setMaxPreferred(0x12);
         BLEDevice::startAdvertising();
 
-        m_started = true;
+        m_keyboard                  = {};
+        m_lastSentKeyboard          = {};
+        m_lastSentKeyboardValid     = false;
+        m_mouseBtn                  = prt_hid::MouseBtn::None;
+        m_lastSentMouseButtons      = prt_hid::MouseBtn::None;
+        m_lastSentMouseButtonsValid = false;
+        m_started                   = true;
         return Ok();
     }
 
@@ -65,17 +71,28 @@ namespace prt_ble_hid
     }
 
     BleHidNkroKeyboardMouse::SendKeyboardResult BleHidNkroKeyboardMouse::sendKeyboard() {
+        prepareState();
         if (!m_started)
             return Err<BleHidNkroKeyboardMouse::Detail::NotStarted>();
         if (!isReady()) {
             return Err<BleHidNkroKeyboardMouse::Detail::NotReady>();
         }
-        // if the keyboard input is null, we can't send the keyboard report
         if (m_keyboardInput == nullptr)
+            return Err<BleHidNkroKeyboardMouse::Detail::KeyboardInputNullError>();
+        if (m_lastSentKeyboardValid && prt_hid::keyboardReportsEqual(m_keyboard, m_lastSentKeyboard)) {
             return Ok(false);
+        }
         m_keyboardInput->setValue(reinterpret_cast<const uint8_t*>(&m_keyboard), sizeof(m_keyboard));
         m_keyboardInput->notify();
+        m_lastSentKeyboard      = m_keyboard;
+        m_lastSentKeyboardValid = true;
         return Ok(true);
+    }
+
+    BleHidNkroKeyboardMouse::UpdateKeyboardStateResult BleHidNkroKeyboardMouse::updateKeyboardState(const prt_hid::KeyboardReport& report) {
+        prepareState();
+        m_keyboard = report;
+        return sendKeyboard();
     }
 
     BleHidNkroKeyboardMouse::SetKeyResult BleHidNkroKeyboardMouse::setKey(prt_hid::KeyId key, bool pressed) {
@@ -85,69 +102,56 @@ namespace prt_ble_hid
         if (m_keyboardInput == nullptr)
             return Err<BleHidNkroKeyboardMouse::Detail::KeyboardInputNullError>();
 
-        const uint8_t usage = static_cast<uint8_t>(key);
-        if (usage >= 0xE0 && usage <= 0xE7) {
-            const uint8_t mask = uint8_t(1u << (usage - 0xE0));
-            if (pressed)
-                m_keyboard.modifiers |= mask;
-            else
-                m_keyboard.modifiers &= uint8_t(~mask);
-        }
-        else if (usage <= 0x77) {
-            const uint8_t mask = uint8_t(1u << (usage & 0x07));
-            if (pressed)
-                m_keyboard.keys[usage >> 3] |= mask;
-            else
-                m_keyboard.keys[usage >> 3] &= uint8_t(~mask);
-        }
-        else {
+        if (!prt_hid::setKeyboardKey(m_keyboard, key, pressed)) {
             return Ok(false);
         }
-        const auto sendKeyboardResult = sendKeyboard();
-        if (sendKeyboardResult.is_ok()) {
-            return Ok(true);
-        }
-        else
-            return Err(sendKeyboardResult.error());
-        return Ok(false);
+        return sendKeyboard();
     }
 
     BleHidNkroKeyboardMouse::ReleaseAllKeyResult BleHidNkroKeyboardMouse::releaseAllKeys() {
         prepareState();
         if (!isReady())
             return Err<BleHidNkroKeyboardMouse::Detail::NotReady>();
-        m_keyboard                    = {};
-        const auto sendKeyboardResult = sendKeyboard();
-        if (sendKeyboardResult.is_ok()) {
-            return Ok(true);
-        }
-        else
-            return Err(sendKeyboardResult.error());
-        return Ok(false);
+        m_keyboard = {};
+        return sendKeyboard();
     }
 
-    BleHidNkroKeyboardMouse::MoveMouseResult BleHidNkroKeyboardMouse::moveMouse(int8_t x, int8_t y, int8_t wheel) {
+    BleHidNkroKeyboardMouse::UpdateMouseStateResult BleHidNkroKeyboardMouse::updateMouseState(const prt_hid::MouseReport& report) {
         prepareState();
+        if (!prt_hid::isMouseReportValid(report))
+            return Err<BleHidNkroKeyboardMouse::Detail::InvalidMouseReport>();
+
+        m_mouseBtn = report.buttons;
+        return sendMouse(report);
+    }
+
+    BleHidNkroKeyboardMouse::UpdateMouseStateResult BleHidNkroKeyboardMouse::sendMouse(const prt_hid::MouseReport& report) {
+        if (!m_started)
+            return Err<BleHidNkroKeyboardMouse::Detail::NotStarted>();
         if (!isReady())
             return Err<BleHidNkroKeyboardMouse::Detail::NotReady>();
         if (m_mouseInput == nullptr)
             return Err<BleHidNkroKeyboardMouse::Detail::MouseInputNullError>();
-        const prt_hid::MouseReport report {.buttons = m_mouseBtn, .x = x, .y = y, .wheel = wheel};
+        if (!prt_hid::hasMouseMotion(report) && m_lastSentMouseButtonsValid && report.buttons == m_lastSentMouseButtons) {
+            return Ok(false);
+        }
         m_mouseInput->setValue(reinterpret_cast<const uint8_t*>(&report), sizeof(report));
         m_mouseInput->notify();
+        m_lastSentMouseButtons      = report.buttons;
+        m_lastSentMouseButtonsValid = true;
         return Ok(true);
+    }
+
+    BleHidNkroKeyboardMouse::MoveMouseResult BleHidNkroKeyboardMouse::moveMouse(int8_t x, int8_t y, int8_t wheel) {
+        return updateMouseState({.buttons = m_mouseBtn, .x = x, .y = y, .wheel = wheel});
     }
 
     BleHidNkroKeyboardMouse::SetMouseBtnResult BleHidNkroKeyboardMouse::setMouseBtn(prt_hid::MouseBtn btn, bool pressed) {
         prepareState();
-        if (!isReady())
-            return Err<BleHidNkroKeyboardMouse::Detail::NotReady>();
-
-        if (pressed)
-            m_mouseBtn |= btn;
-        else
-            m_mouseBtn &= ~btn;
-        return moveMouse(0, 0, 0);
+        auto nextButtons = m_mouseBtn;
+        if (!prt_hid::setMouseButton(nextButtons, btn, pressed))
+            return Err<BleHidNkroKeyboardMouse::Detail::InvalidMouseReport>();
+        return updateMouseState({.buttons = nextButtons});
     }
 
 }

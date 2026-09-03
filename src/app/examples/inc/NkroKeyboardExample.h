@@ -3,6 +3,7 @@
 #include "src/alg/inc/alg_matrix.h"
 #include "src/cfg/AppConfig.h"
 #include "src/dom/NodeInfo.h"
+#include "src/dvc/inc/BufferedMouseScanner.h"
 #include "src/dvc/inc/NkroKeyboardScanner.h"
 #include "src/dvc/inc/Serial.h"
 #include "src/svc/inc/NkroKeyboard.h"
@@ -54,7 +55,7 @@ namespace NkroKeyboardExample
         constexpr UBaseType_t TaskPriority   = 4;
 
         using Scanner = NkroKeyboardScanner<RowCount, ColCount>;
-        using Service = NkroKeyboardService<RowCount, ColCount>;
+        using Service = NkroKeyboardService;
 
         // Physical matrix in row-major order: keyMap[row][col].
         constexpr prt_hid::KeyId DefaultKeyMap[RowCount][ColCount] = {
@@ -101,16 +102,14 @@ namespace NkroKeyboardExample
                 .LongKeyIdMapMatrix = longKeyIdMapMatrix,
             };
 
-            Scanner      scanner {scannerConfig};
-            NkroKeyboard keyboard {};
+            Scanner              scanner {scannerConfig};
+            BufferedMouseScanner mouseScanner {};
+            NkroKeyboard         keyboard {};
 
             Service::Config serviceConfig {
-                .scanDevice         = scanner,
-                .keyboard           = keyboard,
-                .longPressMs        = scannerConfig.longPressMs,
-                .KeyStateMatrix     = keyStateMatrix,
-                .KeyIdMapMatrix     = keyIdMapMatrix,
-                .LongKeyIdMapMatrix = longKeyIdMapMatrix,
+                .scanDevice      = scanner,
+                .keyboard        = keyboard,
+                .mouseScanDevice = &mouseScanner,
             };
             Service      service {serviceConfig};
             TaskHandle_t taskHandle = nullptr;
@@ -128,7 +127,9 @@ namespace NkroKeyboardExample
         inline void taskEntry(void*) {
             Context& app = context();
 #if PRTN_ENABLE_NKRO_DEBUG_LOG
-            uint32_t lastHeartbeatMs = 0;
+            uint32_t                lastHeartbeatMs = 0;
+            prt_hid::KeyboardReport previousDebugReport {};
+            bool                    previousDebugReportValid = false;
 
             app.console.info("NKRO scan task entered");
 #endif
@@ -149,36 +150,27 @@ namespace NkroKeyboardExample
                     continue;
                 }
 
-                const KeyboardScanFrame frame = snapshotResult.unwrap();
-                if (frame.changed) {
+                const auto report = snapshotResult.unwrap();
+                if (!previousDebugReportValid || !prt_hid::keyboardReportsEqual(report, previousDebugReport)) {
                     size_t pressedCount = 0;
-                    for (size_t slot = 0; slot < frame.slotCount; ++slot) {
-                        if ((frame.pressedBitmap[slot >> 3] & static_cast<uint8_t>(1u << (slot & 0x07))) == 0) {
-                            continue;
-                        }
-
-                        ++pressedCount;
-                        const size_t row = slot / ColCount;
-                        const size_t col = slot % ColCount;
-                        app.console.info("key active: slot=%u row=%u col=%u duration_ms=%lu short=0x%02X long=0x%02X",
-                                         static_cast<unsigned>(slot),
-                                         static_cast<unsigned>(row),
-                                         static_cast<unsigned>(col),
-                                         static_cast<unsigned long>(app.keyStateMatrix.data[row][col]),
-                                         static_cast<unsigned>(app.keyIdMapMatrix.data[row][col]),
-                                         static_cast<unsigned>(app.longKeyIdMapMatrix.data[row][col]));
+                    for (const auto byte : report.keys) {
+                        pressedCount += static_cast<size_t>(__builtin_popcount(static_cast<unsigned>(byte)));
                     }
-                    app.console.info("scan state changed: pressed=%u timestamp_ms=%lu",
+                    pressedCount += static_cast<size_t>(__builtin_popcount(static_cast<unsigned>(report.modifiers)));
+                    app.console.info("HID state changed: pressed=%u modifiers=0x%02X",
                                      static_cast<unsigned>(pressedCount),
-                                     static_cast<unsigned long>(frame.timestemp));
+                                     static_cast<unsigned>(report.modifiers));
+                    previousDebugReport      = report;
+                    previousDebugReportValid = true;
                 }
 
-                if (frame.timestemp - lastHeartbeatMs >= 2000) {
+                const uint32_t nowMs = pdTICKS_TO_MS(xTaskGetTickCount());
+                if (nowMs - lastHeartbeatMs >= 2000) {
                     const auto hidReady = app.keyboard.ready();
                     app.console.info("NKRO heartbeat: scan_alive=yes hid_ready=%s timestamp_ms=%lu",
                                      hidReady.is_ok() && hidReady.unwrap() ? "yes" : "no",
-                                     static_cast<unsigned long>(frame.timestemp));
-                    lastHeartbeatMs = frame.timestemp;
+                                     static_cast<unsigned long>(nowMs));
+                    lastHeartbeatMs = nowMs;
                 }
 #endif
 
