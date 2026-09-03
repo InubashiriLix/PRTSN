@@ -14,14 +14,13 @@
 // the sideeffect of pill make me sleepy
 // and the annogying ideas are gone
 
-// TODO: reaname this as BleHidNkroKeyboardMouse
 // TODO: make this service hold the reference to the device of keyboard and mouse
 // the keybaord should be a scanner with interface in IKeyboardScanDevice, and mouse Interface and Device should be created
 //
 namespace prt_ble_hid
 {
 
-    class BleNkroMouse
+    class BleHidNkroKeyboardMouse
     {
     public:
         enum class Detail : uint8_t
@@ -43,9 +42,9 @@ namespace prt_ble_hid
         };
 
     public:
-        BleNkroMouse(const char* deviceName) : m_deviceName(deviceName), m_serverCallbacks(*this), m_ledCallbacks(*this) {};
+        BleHidNkroKeyboardMouse(const char* deviceName) : m_deviceName(deviceName), m_serverCallbacks(*this), m_ledCallbacks(*this) {};
 
-        using SetupResult = Result<void, ErrorSet<Detail::AlreadyStarted, Detail::InvalidDeviceNameParam, Detail::DeviceInitialFailed, Detail::ServerCreateFailed, Detail::HidDeviceCreateFailed, Detail::KeyboardInputCreateFailed, Detail::KeyboardOutputCreateFailed, Detail::MouseInputCreateFailed, BleNkroMouse::Detail::AdvertisingCreateFailed>>;
+        using SetupResult = Result<void, ErrorSet<Detail::AlreadyStarted, Detail::InvalidDeviceNameParam, Detail::DeviceInitialFailed, Detail::ServerCreateFailed, Detail::HidDeviceCreateFailed, Detail::KeyboardInputCreateFailed, Detail::KeyboardOutputCreateFailed, Detail::MouseInputCreateFailed, BleHidNkroKeyboardMouse::Detail::AdvertisingCreateFailed>>;
         [[nodiscard]] SetupResult setup();
         [[nodiscard]] bool        isConnected() const noexcept;
         void                      prepareState() noexcept {
@@ -83,7 +82,7 @@ namespace prt_ble_hid
         class ServerCallbacks final : public BLEServerCallbacks
         {
         public:
-            explicit ServerCallbacks(BleNkroMouse& owner) : m_owner(owner) {}
+            explicit ServerCallbacks(BleHidNkroKeyboardMouse& owner) : m_owner(owner) {}
             void onConnect(BLEServer*) override {
                 m_owner.m_connected.store(true, std::memory_order_release);
             }
@@ -94,13 +93,13 @@ namespace prt_ble_hid
             }
 
         private:
-            BleNkroMouse& m_owner;
+            BleHidNkroKeyboardMouse& m_owner;
         };
 
         class LedCallbacks final : public BLECharacteristicCallbacks
         {
         public:
-            explicit LedCallbacks(BleNkroMouse& owner) : m_owner(owner) {}
+            explicit LedCallbacks(BleHidNkroKeyboardMouse& owner) : m_owner(owner) {}
             void onWrite(BLECharacteristic* characteristic) override {
                 if ((characteristic == nullptr) || characteristic->getLength() < 1)
                     return;
@@ -108,7 +107,7 @@ namespace prt_ble_hid
             }
 
         private:
-            BleNkroMouse& m_owner;
+            BleHidNkroKeyboardMouse& m_owner;
         };
 
     private:

@@ -11,7 +11,6 @@
 
 #include <Arduino.h>
 
-#include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 #ifdef Serial
@@ -35,12 +34,15 @@ namespace NkroKeyboardExample
             Col3,
         };
 
+        // GPIO35..37 are connected to the N16R8 module's octal PSRAM and must
+        // not be used by an application matrix. Wire Row2..Row4 to GPIO21,
+        // GPIO18, and GPIO17 respectively when using this example.
         inline constexpr auto Pins = ::prtn::pin::layout(
             ::prtn::pin::bind(PinId::Row0, GPIO_NUM_39, ::prtn::pin::Role::InputPulldown),
             ::prtn::pin::bind(PinId::Row1, GPIO_NUM_38, ::prtn::pin::Role::InputPulldown),
-            ::prtn::pin::bind(PinId::Row2, GPIO_NUM_37, ::prtn::pin::Role::InputPulldown),
-            ::prtn::pin::bind(PinId::Row3, GPIO_NUM_36, ::prtn::pin::Role::InputPulldown),
-            ::prtn::pin::bind(PinId::Row4, GPIO_NUM_35, ::prtn::pin::Role::InputPulldown),
+            ::prtn::pin::bind(PinId::Row2, GPIO_NUM_21, ::prtn::pin::Role::InputPulldown),
+            ::prtn::pin::bind(PinId::Row3, GPIO_NUM_18, ::prtn::pin::Role::InputPulldown),
+            ::prtn::pin::bind(PinId::Row4, GPIO_NUM_17, ::prtn::pin::Role::InputPulldown),
             ::prtn::pin::bind(PinId::Col0, GPIO_NUM_2, ::prtn::pin::Role::Output),
             ::prtn::pin::bind(PinId::Col1, GPIO_NUM_42, ::prtn::pin::Role::Output),
             ::prtn::pin::bind(PinId::Col2, GPIO_NUM_41, ::prtn::pin::Role::Output),
@@ -81,7 +83,7 @@ namespace NkroKeyboardExample
             Matrix<RowCount, ColCount, uint32_t>       keyStateMatrix {};
             Matrix<RowCount, ColCount, prt_hid::KeyId> keyIdMapMatrix {
                 &DefaultKeyMap[0][0],
-                RowCount * ColCount,
+                RowCount* ColCount,
             };
             Matrix<RowCount, ColCount, prt_hid::KeyId> longKeyIdMapMatrix {};
 
@@ -136,13 +138,13 @@ namespace NkroKeyboardExample
                 const bool updateFailed = result.is_err();
                 if (result.is_err()) {
                     app.nodeInfo.updateNodeState(ERROR);
-                    app.console.error("NKRO keyboard update failed: %s", toName(result.unwrap_err()));
+                    app.console.errorResult("NKRO keyboard update", result.error());
                 }
 
 #if PRTN_ENABLE_NKRO_DEBUG_LOG
                 const auto snapshotResult = app.scanner.snapshot();
                 if (snapshotResult.is_err()) {
-                    app.console.error("NKRO snapshot failed: %s", toName(snapshotResult.unwrap_err()));
+                    app.console.errorResult("NKRO snapshot", snapshotResult.error());
                     vTaskDelay(pdMS_TO_TICKS(250));
                     continue;
                 }
@@ -205,7 +207,7 @@ namespace NkroKeyboardExample
         const auto setupResult = app.service.setup();
         if (setupResult.is_err()) {
             app.nodeInfo.updateNodeState(ERROR);
-            app.console.error("failed to setup NKRO keyboard: %s", toName(setupResult.unwrap_err()));
+            app.console.errorResult("NKRO keyboard setup", setupResult.error());
             app.console.printState(app.nodeInfo.getNodeState());
             return;
         }

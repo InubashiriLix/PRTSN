@@ -5,7 +5,7 @@
 
 #include "src/dvc/inc/Button.h"
 #include "src/svc/inc/SerialConsoleService.h"
-#include "src/svc/inc/BleNkroMouse.h"
+#include "src/svc/inc/BleHidNkroKeyboardMouse.h"
 
 namespace EmptyTemplateApp
 {
@@ -35,10 +35,10 @@ namespace EmptyTemplateApp
                 BOOTING,
             };
 
-            dvc::Serial               serial {AppConfig::Hardware::SerialBaudrate};
-            SerialConsoleService      console {serial};
-            Button                    button1 {Pins[PinId::Button1], LOW, INPUT_PULLUP, 50};
-            prt_ble_hid::BleNkroMouse nkroMouse {"PRTN_NKRO_MOUSE"};
+            dvc::Serial                          serial {AppConfig::Hardware::SerialBaudrate};
+            SerialConsoleService                 console {serial};
+            Button                               button1 {Pins[PinId::Button1], LOW, INPUT_PULLUP, 50};
+            prt_ble_hid::BleHidNkroKeyboardMouse nkroMouse {"PRTN_NKRO_MOUSE"};
 
             TaskHandle_t taskHandle = nullptr;
         };
