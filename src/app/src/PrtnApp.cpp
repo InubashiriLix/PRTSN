@@ -11,6 +11,7 @@
 // #include "src/app/examples/inc/ST7735FpsTextExample.h"
 // #include "src/app/examples/inc/KeyBoard4x5Example.h"
 // #include "src/app/examples/inc/WS2812Example.h"
+// #include "src/app/examples/inc/BleHidExample.h"
 #include "src/app/examples/inc/BleAgentLightApp.h"
 
 // namespace SelectedApp = EspNowEchoApp;
@@ -24,6 +25,7 @@
 // namespace SelectedApp = ST7735FpsTextExample;
 // namespace SelectedApp = KeyBoard4x5Example;
 // namespace SelectedApp = WS2812Example;
+// namespace SelectedApp = BleHidExample;
 namespace SelectedApp = BleAgentLightApp;
 
 void PrtnApp::setup() {

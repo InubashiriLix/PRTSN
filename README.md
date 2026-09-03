@@ -74,23 +74,36 @@ cfg       -> profile selection and app-level constexpr configuration
 With Nix flakes enabled, enter the development environment with:
 
 ```bash
-nix develop
+mkdir -p .cache/nix
+nix develop --profile .cache/nix/dev-shell
 ```
+
+The profile is a project-local garbage-collection root. It keeps the pinned
+toolchain available between shell sessions and after system-wide Nix garbage
+collection. Plain `nix develop` remains supported when a persistent profile is
+not needed.
 
 If you use direnv, run `direnv allow` once; the checked-in `.envrc` will then
 load the same shell automatically. The shell provides Arduino CLI and language
 server tooling, clang/clangd, Rust/Cargo, jq, and Python with Pillow.
 
-The ESP32 Arduino core is stateful board data and must be installed once per
-user (outside the Nix store):
+The ESP32 Arduino Core 3.3.8 and the ESP32-C3/ESP32-S3 cross-compilers,
+debuggers, OpenOCD and support tools are pinned by the flake and stored in the
+Nix store. Each upstream archive is a separate content-addressed Nix download,
+so an interrupted first build reuses every archive that finished successfully.
+No `~/.arduino15` setup is required:
 
 ```bash
-ESP32_INDEX_URL=https://espressif.github.io/arduino-esp32/package_esp32_index.json
-arduino-cli config add board_manager.additional_urls "$ESP32_INDEX_URL"
-arduino-cli core update-index
-arduino-cli core install esp32:esp32
 make check
+make compdb
 ```
+
+The shell points Arduino CLI at the immutable Nix-provided core and keeps only
+disposable download/user state under the repository's ignored `.cache/`
+directory.
+
+The development shell currently supports `x86_64-linux` hosts and the two
+board families configured in this repository: ESP32-C3 and ESP32-S3.
 
 Access to upload and monitor hardware also requires your user account to have
 permission to open the relevant `/dev/ttyUSB*` or `/dev/ttyACM*` device.

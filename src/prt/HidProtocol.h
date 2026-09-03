@@ -5,6 +5,125 @@
 
 namespace prt_hid
 {
+    constexpr static size_t KEYBOARD_NKRO_BITMAP_SIZE = 15;
+
+    enum class ReportId : uint8_t
+    {
+        KEYBOARD = 1,
+        CONSUMER = 2,
+        SYSTEM   = 3,
+        MOUSE    = 4
+    };
+
+    struct KeyboardReport
+    {
+        uint8_t modifiers = 0;
+        uint8_t keys[KEYBOARD_NKRO_BITMAP_SIZE] {};
+    } __attribute__((packed));
+
+    static_assert(sizeof(KeyboardReport) == 16, "KeyboardReport must match the HID descriptor");
+
+    struct FeatureReport
+    {
+        uint8_t command;
+        uint8_t slot;
+        uint8_t usage_lo;
+        uint8_t usage_hi;
+        uint8_t layer;
+        uint8_t reserved[27];
+    } __attribute__((packed));
+
+    enum class MouseBtn : uint8_t
+    {
+        None         = 0u,
+        MouseLeft    = 1u << 0,
+        MouseRight   = 1u << 1,
+        MouseMiddle  = 1u << 2,
+        MouseBack    = 1u << 3,
+        MouseForward = 1u << 4,
+    };
+
+    constexpr MouseBtn operator|(MouseBtn a, MouseBtn b) {
+        return static_cast<MouseBtn>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
+    }
+
+    constexpr MouseBtn operator&(MouseBtn a, MouseBtn b) {
+        return static_cast<MouseBtn>(static_cast<uint8_t>(a) & static_cast<uint8_t>(b));
+    }
+
+    constexpr MouseBtn operator~(MouseBtn a) {
+        return static_cast<MouseBtn>(~static_cast<uint8_t>(a));
+    }
+
+    constexpr MouseBtn& operator|=(MouseBtn& a, MouseBtn b) {
+        a = a | b;
+        return a;
+    }
+
+    constexpr MouseBtn& operator&=(MouseBtn& a, MouseBtn b) {
+        a = a & b;
+        return a;
+    }
+
+    enum class KeyboardLed : uint8_t
+    {
+        None       = 0u,
+        NumLock    = 1u << 0,
+        CapsLock   = 1u << 1,
+        ScrollLock = 1u << 2,
+        Compose    = 1u << 3,
+        Kana       = 1u << 4,
+    };
+
+    struct MouseReport
+    {
+        MouseBtn buttons = MouseBtn::None;
+        int8_t   x       = 0;
+        int8_t   y       = 0;
+        int8_t   wheel   = 0;
+    } __attribute__((packed));
+
+    constexpr static uint8_t MOUSE_BUTTON_MASK = 0x1F;
+    constexpr static int8_t  MOUSE_DELTA_MIN   = -127;
+    constexpr static int8_t  MOUSE_DELTA_MAX   = 127;
+
+    static_assert(sizeof(MouseReport) == 4, "MouseReport must match the HID descriptor");
+
+    constexpr bool isMouseButtonMaskValid(MouseBtn buttons) {
+        return (static_cast<uint8_t>(buttons) & static_cast<uint8_t>(~MOUSE_BUTTON_MASK)) == 0;
+    }
+
+    constexpr bool setMouseButton(MouseBtn& buttons, MouseBtn buttonMask, bool pressed) {
+        if (!isMouseButtonMaskValid(buttons) || !isMouseButtonMaskValid(buttonMask)) {
+            return false;
+        }
+        if (pressed) {
+            buttons |= buttonMask;
+        }
+        else {
+            buttons &= ~buttonMask;
+        }
+        return true;
+    }
+
+    constexpr int8_t clampMouseDelta(int32_t delta) {
+        if (delta < MOUSE_DELTA_MIN) {
+            return MOUSE_DELTA_MIN;
+        }
+        if (delta > MOUSE_DELTA_MAX) {
+            return MOUSE_DELTA_MAX;
+        }
+        return static_cast<int8_t>(delta);
+    }
+
+    constexpr bool isMouseReportValid(const MouseReport& report) {
+        return isMouseButtonMaskValid(report.buttons) && report.x >= MOUSE_DELTA_MIN && report.y >= MOUSE_DELTA_MIN &&
+               report.wheel >= MOUSE_DELTA_MIN;
+    }
+
+    constexpr bool hasMouseMotion(const MouseReport& report) {
+        return report.x != 0 || report.y != 0 || report.wheel != 0;
+    }
 
     // clang-format off
     // 说明：
@@ -101,7 +220,39 @@ namespace prt_hid
         0x75, 0x05,        //   Report Size (5)
         0x95, 0x01,        //   Report Count (1)
         0x81, 0x03,        //   Input (Const,Var,Abs)
-        0xC0               // End Collection
+        0xC0,               // End Collection
+
+        // ---------- Report ID 4: relative mouse / 相对位移鼠标 ----------
+        0x05, 0x01,       // Usage Page (Generic Desktop)
+        0x09, 0x02,       // Usage (Mouse)
+        0xA1, 0x01,       // Collection (Application)
+        0x85, 0x04,       //   Report ID (4)
+        0x09, 0x01,       //   Usage (Pointer)
+        0xA1, 0x00,       //   Collection (Physical)
+
+        0x05, 0x09,       //     Usage Page (Button)
+        0x19, 0x01,       //     Usage Minimum (Button 1)
+        0x29, 0x05,       //     Usage Maximum (Button 5)
+        0x15, 0x00,       //     Logical Minimum (0)
+        0x25, 0x01,       //     Logical Maximum (1)
+        0x75, 0x01,       //     Report Size (1 bit)
+        0x95, 0x05,       //     Report Count (5)
+        0x81, 0x02,       //     Input (Data, Variable, Absolute)
+        0x75, 0x03,       //     Report Size (3-bit padding)
+        0x95, 0x01,       //     Report Count (1)
+        0x81, 0x03,       //     Input (Constant, Variable, Absolute)
+
+        0x05, 0x01,       //     Usage Page (Generic Desktop)
+        0x09, 0x30,       //     Usage (X)
+        0x09, 0x31,       //     Usage (Y)
+        0x09, 0x38,       //     Usage (Wheel)
+        0x15, 0x81,       //     Logical Minimum (-127)
+        0x25, 0x7F,       //     Logical Maximum (127)
+        0x75, 0x08,       //     Report Size (8 bits)
+        0x95, 0x03,       //     Report Count (3)
+        0x81, 0x06,       //     Input (Data, Variable, Relative)
+        0xC0,             //   End Collection
+        0xC0,             // End Collection
     };
 
     enum class KeyId : uint8_t
@@ -303,6 +454,55 @@ namespace prt_hid
     constexpr static uint8_t  KEY_ID_NKRO_MAX        = 0x77;
     constexpr static uint16_t HID_CONSUMER_USAGE_MAX = 0x03FF;
     constexpr static size_t   HID_FEATURE_MAX_SLOTS  = 256;
+
+    constexpr bool isKeyboardModifier(KeyId key) {
+        const auto usage = static_cast<uint8_t>(key);
+        return usage >= KEY_ID_MODIFIERS_START && usage <= KEY_ID_MODIFIERS_END;
+    }
+
+    constexpr bool isKeyboardKey(KeyId key) {
+        const auto usage = static_cast<uint8_t>(key);
+        return key != KeyId::None && (usage <= KEY_ID_NKRO_MAX || isKeyboardModifier(key));
+    }
+
+    constexpr bool setKeyboardKey(KeyboardReport& report, KeyId key, bool pressed) {
+        if (!isKeyboardKey(key)) {
+            return false;
+        }
+
+        const auto usage = static_cast<uint8_t>(key);
+        if (isKeyboardModifier(key)) {
+            const auto mask = static_cast<uint8_t>(1u << (usage - KEY_ID_MODIFIERS_START));
+            if (pressed) {
+                report.modifiers |= mask;
+            }
+            else {
+                report.modifiers &= static_cast<uint8_t>(~mask);
+            }
+            return true;
+        }
+
+        const auto mask = static_cast<uint8_t>(1u << (usage & 0x07));
+        if (pressed) {
+            report.keys[usage >> 3] |= mask;
+        }
+        else {
+            report.keys[usage >> 3] &= static_cast<uint8_t>(~mask);
+        }
+        return true;
+    }
+
+    constexpr bool keyboardReportsEqual(const KeyboardReport& lhs, const KeyboardReport& rhs) {
+        if (lhs.modifiers != rhs.modifiers) {
+            return false;
+        }
+        for (size_t index = 0; index < KEYBOARD_NKRO_BITMAP_SIZE; ++index) {
+            if (lhs.keys[index] != rhs.keys[index]) {
+                return false;
+            }
+        }
+        return true;
+    }
 
     // clang-format on
 

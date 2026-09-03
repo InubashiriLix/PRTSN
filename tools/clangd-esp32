@@ -10,14 +10,15 @@ fi
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 PROJECT_ROOT="$(dirname -- "$SCRIPT_DIR")"
 CLANGD_DB="$PROJECT_ROOT/.clangd-db"
+ESP32_TOOLS="${ARDUINO_ESP32_TOOLS:?enter the development environment with 'nix develop'}"
 
 if [ -f "$CLANGD_DB/compile_commands.json" ]; then
 	exec "$CLANGD" \
 		"$@" \
 		--compile-commands-dir="$CLANGD_DB" \
-		--query-driver="$HOME/.arduino15/packages/esp32/tools/esp-rv32/*/bin/riscv32-esp-elf-*"
+		--query-driver="$ESP32_TOOLS/esp-rv32/*/bin/riscv32-esp-elf-*"
 fi
 
 exec "$CLANGD" \
 	"$@" \
-	--query-driver="$HOME/.arduino15/packages/esp32/tools/esp-rv32/*/bin/riscv32-esp-elf-*"
+	--query-driver="$ESP32_TOOLS/esp-rv32/*/bin/riscv32-esp-elf-*"

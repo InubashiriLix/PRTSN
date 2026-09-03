@@ -5,20 +5,10 @@
 #include "src/dom/NodeInfo.h"
 #include "src/dvc/inc/BufferedMouseScanner.h"
 #include "src/dvc/inc/NkroKeyboardScanner.h"
-#include "src/dvc/inc/Serial.h"
-#include "src/svc/inc/NkroKeyboard.h"
-#include "src/svc/inc/NkroKeyboardService.h"
+#include "src/svc/inc/BleHidNkroKeyboardMouse.h"
 #include "src/svc/inc/SerialConsoleService.h"
 
-#include <Arduino.h>
-
-#include "freertos/task.h"
-
-#ifdef Serial
-#undef Serial
-#endif
-
-namespace NkroKeyboardExample
+namespace BleHidExample
 {
     namespace Detail
     {
@@ -35,9 +25,6 @@ namespace NkroKeyboardExample
             Col3,
         };
 
-        // GPIO35..37 are connected to the N16R8 module's octal PSRAM and must
-        // not be used by an application matrix. Wire Row2..Row4 to GPIO21,
-        // GPIO18, and GPIO17 respectively when using this example.
         inline constexpr auto Pins = ::prtn::pin::layout(
             ::prtn::pin::bind(PinId::Row0, GPIO_NUM_39, ::prtn::pin::Role::InputPulldown),
             ::prtn::pin::bind(PinId::Row1, GPIO_NUM_38, ::prtn::pin::Role::InputPulldown),
@@ -55,9 +42,7 @@ namespace NkroKeyboardExample
         constexpr UBaseType_t TaskPriority   = 4;
 
         using Scanner = NkroKeyboardScanner<RowCount, ColCount>;
-        using Service = NkroKeyboardService;
 
-        // Physical matrix in row-major order: keyMap[row][col].
         constexpr prt_hid::KeyId DefaultKeyMap[RowCount][ColCount] = {
             {prt_hid::KeyId::Escape, prt_hid::KeyId::KeypadDivide, prt_hid::KeyId::KeypadMultiply, prt_hid::KeyId::KeypadMinus},
             {prt_hid::KeyId::Keypad7, prt_hid::KeyId::Keypad8, prt_hid::KeyId::Keypad9, prt_hid::KeyId::KeypadPlus},
@@ -102,17 +87,10 @@ namespace NkroKeyboardExample
                 .LongKeyIdMapMatrix = longKeyIdMapMatrix,
             };
 
-            Scanner              scanner {scannerConfig};
-            BufferedMouseScanner mouseScanner {};
-            NkroKeyboard         keyboard {};
-
-            Service::Config serviceConfig {
-                .scanDevice      = scanner,
-                .keyboard        = keyboard,
-                .mouseScanDevice = &mouseScanner,
-            };
-            Service      service {serviceConfig};
-            TaskHandle_t taskHandle = nullptr;
+            Scanner                              scanner {scannerConfig};
+            BufferedMouseScanner                 mouseScanner {};
+            prt_ble_hid::BleHidNkroKeyboardMouse hid {"PRTN_NKRO_MOUSE"};
+            TaskHandle_t                         taskHandle = nullptr;
 
             Context() {
                 longKeyIdMapMatrix.data[0][0] = prt_hid::KeyId::F11;
@@ -126,58 +104,71 @@ namespace NkroKeyboardExample
 
         inline void taskEntry(void*) {
             Context& app = context();
-#if PRTN_ENABLE_NKRO_DEBUG_LOG
-            uint32_t                lastHeartbeatMs = 0;
-            prt_hid::KeyboardReport previousDebugReport {};
-            bool                    previousDebugReportValid = false;
-
-            app.console.info("NKRO scan task entered");
-#endif
 
             for (;;) {
-                const auto result       = app.service.update();
-                const bool updateFailed = result.is_err();
-                if (result.is_err()) {
+                const auto scanResult = app.scanner.scan();
+                if (scanResult.is_err()) {
                     app.nodeInfo.updateNodeState(ERROR);
-                    app.console.errorResult("NKRO keyboard update", result.error());
-                }
-
-#if PRTN_ENABLE_NKRO_DEBUG_LOG
-                const auto snapshotResult = app.scanner.snapshot();
-                if (snapshotResult.is_err()) {
-                    app.console.errorResult("NKRO snapshot", snapshotResult.error());
+                    app.console.errorResult("BLE keyboard scan", scanResult.error());
                     vTaskDelay(pdMS_TO_TICKS(250));
                     continue;
                 }
 
-                const auto report = snapshotResult.unwrap();
-                if (!previousDebugReportValid || !prt_hid::keyboardReportsEqual(report, previousDebugReport)) {
-                    size_t pressedCount = 0;
-                    for (const auto byte : report.keys) {
-                        pressedCount += static_cast<size_t>(__builtin_popcount(static_cast<unsigned>(byte)));
+                const auto mouseScanResult = app.mouseScanner.scan();
+                if (mouseScanResult.is_err()) {
+                    app.nodeInfo.updateNodeState(ERROR);
+                    app.console.errorResult("BLE mouse scan", mouseScanResult.error());
+                    vTaskDelay(pdMS_TO_TICKS(250));
+                    continue;
+                }
+
+                if (!app.hid.isReady()) {
+                    continue;
+                }
+
+                const auto mouseUpdateResult = app.hid.updateMouseState(mouseScanResult.unwrap());
+                if (mouseUpdateResult.is_err() &&
+                    !mouseUpdateResult.error().is<prt_ble_hid::BleHidNkroKeyboardMouse::Detail::NotReady>()) {
+                    app.nodeInfo.updateNodeState(ERROR);
+                    app.console.errorResult("BLE mouse update", mouseUpdateResult.error());
+                    vTaskDelay(pdMS_TO_TICKS(250));
+                    continue;
+                }
+
+                const auto updateResult = app.hid.updateKeyboardState(scanResult.unwrap());
+                if (updateResult.is_err()) {
+                    if (updateResult.error().is<prt_ble_hid::BleHidNkroKeyboardMouse::Detail::NotReady>()) {
+                        continue;
                     }
-                    pressedCount += static_cast<size_t>(__builtin_popcount(static_cast<unsigned>(report.modifiers)));
-                    app.console.info("HID state changed: pressed=%u modifiers=0x%02X",
-                                     static_cast<unsigned>(pressedCount),
-                                     static_cast<unsigned>(report.modifiers));
-                    previousDebugReport      = report;
-                    previousDebugReportValid = true;
-                }
-
-                const uint32_t nowMs = pdTICKS_TO_MS(xTaskGetTickCount());
-                if (nowMs - lastHeartbeatMs >= 2000) {
-                    const auto hidReady = app.keyboard.ready();
-                    app.console.info("NKRO heartbeat: scan_alive=yes hid_ready=%s timestamp_ms=%lu",
-                                     hidReady.is_ok() && hidReady.unwrap() ? "yes" : "no",
-                                     static_cast<unsigned long>(nowMs));
-                    lastHeartbeatMs = nowMs;
-                }
-#endif
-
-                if (updateFailed) {
+                    app.nodeInfo.updateNodeState(ERROR);
+                    app.console.errorResult("BLE keyboard update", updateResult.error());
                     vTaskDelay(pdMS_TO_TICKS(250));
                 }
             }
+        }
+
+        inline bool startTask() {
+            Context& app = context();
+            if (app.taskHandle != nullptr) {
+                return true;
+            }
+
+            const BaseType_t ok = xTaskCreate(
+                taskEntry,
+                "BLE NKRO keyboard",
+                TaskStackBytes,
+                nullptr,
+                TaskPriority,
+                &app.taskHandle);
+
+            if (ok != pdPASS) {
+                app.taskHandle = nullptr;
+                app.nodeInfo.updateNodeState(ERROR);
+                app.console.error("failed to create BLE keyboard task");
+                return false;
+            }
+
+            return true;
         }
     }
 
@@ -186,46 +177,40 @@ namespace NkroKeyboardExample
 
         app.console.setup();
         app.console.printBootBanner(app.nodeInfo);
-#if PRTN_ENABLE_NKRO_DEBUG_LOG
-        app.console.info("NKRO example ready: rows=%u cols=%u slots=%u debounce_ms=%lu long_press_ms=%lu",
-                         static_cast<unsigned>(Detail::RowCount),
-                         static_cast<unsigned>(Detail::ColCount),
-                         static_cast<unsigned>(Detail::RowCount * Detail::ColCount),
-                         static_cast<unsigned long>(app.scannerConfig.debounceMs),
-                         static_cast<unsigned long>(app.scannerConfig.longPressMs));
-        app.console.info("starting keyboard service: scanner setup -> HID setup -> USB begin");
-#endif
 
-        const auto setupResult = app.service.setup();
-        if (setupResult.is_err()) {
+        const auto scannerSetupResult = app.scanner.setup();
+        if (scannerSetupResult.is_err()) {
             app.nodeInfo.updateNodeState(ERROR);
-            app.console.errorResult("NKRO keyboard setup", setupResult.error());
+            app.console.errorResult("BLE keyboard scanner setup", scannerSetupResult.error());
             app.console.printState(app.nodeInfo.getNodeState());
             return;
         }
-#if PRTN_ENABLE_NKRO_DEBUG_LOG
-        app.console.info("keyboard service setup complete");
-        app.console.info("creating NKRO scan task");
-#endif
 
-        const BaseType_t ok = xTaskCreate(
-            Detail::taskEntry,
-            "nkro keyboard",
-            Detail::TaskStackBytes,
-            nullptr,
-            Detail::TaskPriority,
-            &app.taskHandle);
-
-        if (ok != pdPASS) {
-            app.service.end();
+        const auto mouseSetupResult = app.mouseScanner.setup();
+        if (mouseSetupResult.is_err()) {
             app.nodeInfo.updateNodeState(ERROR);
-            app.console.error("failed to create NKRO keyboard task");
+            app.console.errorResult("BLE mouse scanner setup", mouseSetupResult.error());
+            app.scanner.end();
             app.console.printState(app.nodeInfo.getNodeState());
             return;
         }
-#if PRTN_ENABLE_NKRO_DEBUG_LOG
-        app.console.info("NKRO scan task created");
-#endif
+
+        const auto hidSetupResult = app.hid.setup();
+        if (hidSetupResult.is_err()) {
+            app.nodeInfo.updateNodeState(ERROR);
+            app.console.errorResult("BLE HID setup", hidSetupResult.error());
+            app.mouseScanner.end();
+            app.scanner.end();
+            app.console.printState(app.nodeInfo.getNodeState());
+            return;
+        }
+
+        if (!Detail::startTask()) {
+            app.mouseScanner.end();
+            app.scanner.end();
+            app.console.printState(app.nodeInfo.getNodeState());
+            return;
+        }
 
         app.nodeInfo.updateNodeState(RUNNING);
         app.console.printState(app.nodeInfo.getNodeState());

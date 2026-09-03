@@ -10,7 +10,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <limits>
 
 template <size_t RowNums, size_t ColNums>
@@ -40,9 +39,7 @@ public:
     explicit NkroKeyboardScanner(Config& config)
         : m_config(config) {
         m_config.KeyStateMatrix.clear();
-        std::memset(m_pressedBitmap, 0, sizeof(m_pressedBitmap));
-        std::memset(m_previousPressedBitmap, 0, sizeof(m_previousPressedBitmap));
-        m_snapshot = makeSnapshot(0, false);
+        m_snapshot = {};
     }
 
     Result<void, StdErrors> setup() override {
@@ -64,10 +61,9 @@ public:
         }
 
         m_config.KeyStateMatrix.clear();
-        std::memset(m_pressedBitmap, 0, sizeof(m_pressedBitmap));
-        std::memset(m_previousPressedBitmap, 0, sizeof(m_previousPressedBitmap));
-        m_snapshot    = makeSnapshot(0, false);
-        m_initialized = true;
+        m_snapshot            = {};
+        m_lastScanTimestampMs = 0;
+        m_initialized         = true;
         return Ok();
     }
 
@@ -82,10 +78,9 @@ public:
         }
 
         m_config.KeyStateMatrix.clear();
-        std::memset(m_pressedBitmap, 0, sizeof(m_pressedBitmap));
-        std::memset(m_previousPressedBitmap, 0, sizeof(m_previousPressedBitmap));
-        m_snapshot    = makeSnapshot(0, false);
-        m_initialized = false;
+        m_snapshot            = {};
+        m_lastScanTimestampMs = 0;
+        m_initialized         = false;
         return Ok();
     }
 
@@ -96,23 +91,22 @@ public:
 
         m_resetting = true;
         m_config.KeyStateMatrix.clear();
-        std::memset(m_pressedBitmap, 0, sizeof(m_pressedBitmap));
-        std::memset(m_previousPressedBitmap, 0, sizeof(m_previousPressedBitmap));
-        m_snapshot  = makeSnapshot(0, false);
-        m_resetting = false;
+        m_snapshot            = {};
+        m_lastScanTimestampMs = 0;
+        m_resetting           = false;
         return Ok();
     }
 
-    Result<KeyboardScanFrame, StdErrors> scan() override {
+    Result<prt_hid::KeyboardReport, StdErrors> scan() override {
         if (!m_initialized || m_resetting) {
             return Err<StdError::INVALID_STATE>();
         }
 
-        const uint32_t    nowMs         = pdTICKS_TO_MS(xTaskGetTickCount());
-        const uint32_t    elapsedMs     = m_snapshot.timestemp == 0 ? 0 : nowMs - m_snapshot.timestemp;
-        const StdPinLevel inactiveLevel = m_config.activeLevel == StdPinLevel::High ? StdPinLevel::Low : StdPinLevel::High;
-
-        std::memset(m_pressedBitmap, 0, sizeof(m_pressedBitmap));
+        const uint32_t          nowMs         = pdTICKS_TO_MS(xTaskGetTickCount());
+        const uint32_t          elapsedMs     = m_lastScanTimestampMs == 0 ? 0 : nowMs - m_lastScanTimestampMs;
+        const StdPinLevel       inactiveLevel = m_config.activeLevel == StdPinLevel::High ? StdPinLevel::Low : StdPinLevel::High;
+        prt_hid::KeyboardReport nextReport {};
+        bool                    invalidMapping = false;
 
         for (size_t col = 0; col < ColNums; ++col) {
             stdPinWrite(m_config.colPins[col], m_config.activeLevel);
@@ -128,8 +122,13 @@ public:
                     }
 
                     if (activeMs >= m_config.debounceMs) {
-                        const size_t slot = row * ColNums + col;
-                        m_pressedBitmap[slot >> 3] |= static_cast<uint8_t>(1u << (slot & 0x07));
+                        auto key = m_config.KeyIdMapMatrix.data[row][col];
+                        if (activeMs >= m_config.longPressMs && m_config.LongKeyIdMapMatrix.data[row][col] != prt_hid::KeyId::None) {
+                            key = m_config.LongKeyIdMapMatrix.data[row][col];
+                        }
+                        if (key != prt_hid::KeyId::None && !prt_hid::setKeyboardKey(nextReport, key, true)) {
+                            invalidMapping = true;
+                        }
                     }
                 }
                 else {
@@ -140,56 +139,50 @@ public:
             stdPinWrite(m_config.colPins[col], inactiveLevel);
         }
 
-        const bool changed = std::memcmp(m_pressedBitmap, m_previousPressedBitmap, sizeof(m_pressedBitmap)) != 0;
-        if (changed) {
-            std::memcpy(m_previousPressedBitmap, m_pressedBitmap, sizeof(m_pressedBitmap));
-        }
-        m_snapshot = makeSnapshot(nowMs, changed);
+        m_lastScanTimestampMs = nowMs;
 
         if (m_config.scanIntervalMs > 0) {
             vTaskDelay(pdMS_TO_TICKS(m_config.scanIntervalMs));
         }
+        if (invalidMapping) {
+            return Err<StdError::INVALID_ARGUMENT>();
+        }
+
+        m_snapshot = nextReport;
         return Ok(m_snapshot);
     }
 
-    Result<KeyboardScanFrame, StdErrors> snapshot() override {
+    Result<prt_hid::KeyboardReport, StdErrors> snapshot() override {
         if (!m_initialized || m_resetting) {
             return Err<StdError::INVALID_STATE>();
         }
         return Ok(m_snapshot);
     }
 
-    uint8_t getRowNum() const override {
-        return static_cast<uint8_t>(RowNums);
+    Result<prt_hid::KeyId, StdErrors> setShortKey(uint16_t slot, prt_hid::KeyId key) {
+        return setKeyMapping(m_config.KeyIdMapMatrix, slot, key);
     }
 
-    uint8_t getColNum() const override {
-        return static_cast<uint8_t>(ColNums);
-    }
-
-    uint16_t slotCount() const override {
-        return static_cast<uint16_t>(RowNums * ColNums);
+    Result<prt_hid::KeyId, StdErrors> setLongKey(uint16_t slot, prt_hid::KeyId key) {
+        return setKeyMapping(m_config.LongKeyIdMapMatrix, slot, key);
     }
 
 private:
-    static constexpr size_t PressedBitmapSize = (RowNums * ColNums + 7) / 8;
+    Result<prt_hid::KeyId, StdErrors> setKeyMapping(Matrix<RowNums, ColNums, prt_hid::KeyId>& keyMap, uint16_t slot, prt_hid::KeyId key) {
+        if (slot >= RowNums * ColNums || (key != prt_hid::KeyId::None && !prt_hid::isKeyboardKey(key))) {
+            return Err<StdError::INVALID_ARGUMENT>();
+        }
 
-    KeyboardScanFrame makeSnapshot(uint32_t timestamp, bool changed) const {
-        return KeyboardScanFrame {
-            m_pressedBitmap,
-            PressedBitmapSize,
-            static_cast<uint8_t>(RowNums),
-            static_cast<uint8_t>(ColNums),
-            static_cast<uint16_t>(RowNums * ColNums),
-            timestamp,
-            changed,
-        };
+        const size_t row      = slot / ColNums;
+        const size_t col      = slot % ColNums;
+        const auto   previous = keyMap.data[row][col];
+        keyMap.data[row][col] = key;
+        return Ok(previous);
     }
 
-    Config&           m_config;
-    bool              m_initialized = false;
-    bool              m_resetting   = false;
-    uint8_t           m_pressedBitmap[PressedBitmapSize] {};
-    uint8_t           m_previousPressedBitmap[PressedBitmapSize] {};
-    KeyboardScanFrame m_snapshot {};
+    Config&                 m_config;
+    bool                    m_initialized         = false;
+    bool                    m_resetting           = false;
+    uint32_t                m_lastScanTimestampMs = 0;
+    prt_hid::KeyboardReport m_snapshot {};
 };

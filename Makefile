@@ -36,7 +36,10 @@ GIF_HEIGHT ?= 160
 GIF_FPS ?= 60
 GIF_FIT ?= contain
 
-ESP32_TOOLS := $(HOME)/.arduino15/packages/esp32/tools
+ESP32_TOOLS := $(strip $(ARDUINO_ESP32_TOOLS))
+ifeq ($(ESP32_TOOLS),)
+$(error ARDUINO_ESP32_TOOLS is not set; enter the development environment with 'nix develop')
+endif
 OPENOCD_ROOT := $(lastword $(sort $(wildcard $(ESP32_TOOLS)/openocd-esp32/*)))
 OPENOCD_BIN := $(OPENOCD_ROOT)/bin/openocd
 OPENOCD_SCRIPTS := $(OPENOCD_ROOT)/share/openocd/scripts
